@@ -1,5 +1,6 @@
 using SwingSignal.Infrastructure;
 using SwingSignal.Infrastructure.Extensions;
+using SwingSignal.Infrastructure.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,9 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SwingSignalDbContext>();
     db.Database.EnsureCreated();
+
+    var seeder = scope.ServiceProvider.GetRequiredService<AssetSeeder>();
+    await seeder.SeedAsync();
 }
 
 if (app.Environment.IsDevelopment())
