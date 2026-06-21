@@ -5,6 +5,7 @@ using SwingSignal.Application.Interfaces;
 using SwingSignal.Infrastructure.BackgroundServices;
 using SwingSignal.Infrastructure.ExternalClients;
 using SwingSignal.Infrastructure.Repositories;
+using SwingSignal.Infrastructure.Services;
 
 namespace SwingSignal.Infrastructure.Extensions;
 
@@ -18,6 +19,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<ICandleRepository, CandleRepository>();
         services.AddScoped<IMacroRepository, MacroRepository>();
+        services.AddScoped<IMacroRegimeService, MacroRegimeService>();
+        services.AddScoped<IHistoricalOddsService, HistoricalOddsService>();
 
         services.AddHttpClient<FredApiClient>();
         services.AddHttpClient<BinanceApiClient>();
