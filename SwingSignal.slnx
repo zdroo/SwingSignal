@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SwingSignal.Api/SwingSignal.Api.csproj" />
+  <Project Path="SwingSignal.Application/SwingSignal.Application.csproj" />
+  <Project Path="SwingSignal.Domain/SwingSignal.Domain.csproj" />
+  <Project Path="SwingSignal.Infrastructure/SwingSignal.Infrastructure.csproj" />
+</Solution>
