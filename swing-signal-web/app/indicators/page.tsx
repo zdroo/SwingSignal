@@ -4,9 +4,10 @@ import { FAMILIES, INDICATORS, COMBOS, MOST_WATCHED, getIndicator } from "@/lib/
 import { ArrowRight, BookOpen, Layers, Star } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Understanding Macro Indicators — SwingSignal",
+  title: "Understanding Macro Indicators",
   description:
-    "What each macro indicator means, what high and low values tell you, and how indicators combine into market regimes.",
+    "The yield curve, Fed funds rate, VIX, credit spreads and 20+ more macro indicators explained: what they measure, what high and low values mean, and how professionals read them in combination.",
+  alternates: { canonical: "/indicators" },
 };
 
 function IndicatorEntry({ indicatorKey }: { indicatorKey: string }) {

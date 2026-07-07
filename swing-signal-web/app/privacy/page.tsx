@@ -3,8 +3,9 @@ import Link from "next/link";
 import { Lock } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — SwingSignal",
+  title: "Privacy Policy",
   description: "What data SwingSignal collects, why, and your rights.",
+  alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

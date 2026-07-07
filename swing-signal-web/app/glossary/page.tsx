@@ -4,9 +4,10 @@ import { GlossaryList } from "@/components/GlossaryList";
 import { GraduationCap, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Investing Dictionary — SwingSignal",
+  title: "Investing Dictionary for Beginners",
   description:
-    "Inflation, yield, bonds, leverage — every investing term explained in plain language, for people just getting started.",
+    "Inflation, yield, bonds, leverage, the Fed — every investing term explained in plain language with everyday analogies. Written for people just getting started.",
+  alternates: { canonical: "/glossary" },
 };
 
 export default function GlossaryPage() {

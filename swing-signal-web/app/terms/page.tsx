@@ -3,8 +3,9 @@ import Link from "next/link";
 import { ScrollText } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — SwingSignal",
+  title: "Terms of Use",
   description: "The rules for using SwingSignal.",
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {

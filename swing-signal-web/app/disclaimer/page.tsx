@@ -3,8 +3,9 @@ import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Disclaimer — SwingSignal",
+  title: "Disclaimer",
   description: "What SwingSignal is, what it isn't, and how to read our numbers responsibly.",
+  alternates: { canonical: "/disclaimer" },
 };
 
 export default function DisclaimerPage() {

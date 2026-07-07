@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import { api } from "@/lib/api";
 import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
+
+export const metadata: Metadata = {
+  title: "Live Macro Dashboard",
+  description:
+    "26 macro indicators live: Fed policy, yield curve, inflation, credit stress and more — each explained in plain English, with the most similar historical periods.",
+  alternates: { canonical: "/dashboard" },
+};
 import { AssetSearch } from "@/components/AssetSearch";
 import { PopularAssets } from "@/components/PopularAssets";
 import { ProWaitlist } from "@/components/ProWaitlist";

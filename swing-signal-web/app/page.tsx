@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { api } from "@/lib/api";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
 import { PopularAssets } from "@/components/PopularAssets";
 import type { AssetOddsDto, MacroRegimeDto } from "@/types";

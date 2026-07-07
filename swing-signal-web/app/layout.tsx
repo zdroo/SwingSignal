@@ -17,10 +17,53 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "SwingSignal — Macro Context Dashboard",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "SwingSignal — Honest Odds for Swing Traders",
+    template: "%s — SwingSignal",
+  },
   description:
-    "Historical odds of asset price movements given current macro conditions.",
+    "See how assets historically performed in macro conditions like today's. Honest, backtested odds for stocks, crypto, forex and commodities — no signals, no promises.",
+  keywords: [
+    "macro indicators", "swing trading", "market regime", "historical odds",
+    "yield curve", "fed funds rate", "backtested", "bitcoin odds", "S&P 500 odds",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: "SwingSignal",
+    title: "SwingSignal — Honest Odds for Swing Traders",
+    description:
+      "Historical odds for any asset, based on 30+ years of macro regimes. Verify our accuracy yourself — every asset page has a built-in backtest.",
+    url: SITE_URL,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SwingSignal — Honest Odds for Swing Traders",
+    description:
+      "Historical odds for any asset, based on 30+ years of macro regimes. No signals, no promises — and you can verify our accuracy yourself.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
+
+// Search engines: what this site is
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "SwingSignal",
+  url: SITE_URL,
+  description:
+    "Macro context dashboard for swing traders: historical odds of asset price movements given current macroeconomic conditions.",
+  publisher: {
+    "@type": "Organization",
+    name: "SwingSignal",
+    url: SITE_URL,
+  },
 };
 
 // Runs before hydration so the correct theme class is present on first paint
@@ -44,6 +87,10 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <AnalyticsScript />
       </head>
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
