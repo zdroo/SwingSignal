@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import type { BacktestComparisonDto, BacktestResultDto } from "@/types";
 import { FlaskConical, Loader2, AlertCircle, GitCompareArrows, Lock } from "lucide-react";
 
@@ -37,9 +38,14 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
     try {
       const r = await api.runBacktest(symbol, selectedDays);
       setResult(r);
+      track("backtest_run", { symbol, days: selectedDays });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setGated(true);
-      else setError("Backtest failed — the API may still be ingesting data for this asset.");
+      if (err instanceof ApiError && err.status === 401) {
+        setGated(true);
+        track("gate_hit", { gate: "backtest", symbol });
+      } else {
+        setError("Backtest failed — the API may still be ingesting data for this asset.");
+      }
     } finally {
       setLoading(false);
     }

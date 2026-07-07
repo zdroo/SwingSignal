@@ -11,6 +11,8 @@ public class SwingSignalDbContext : DbContext
     public DbSet<Candle> Candles => Set<Candle>();
     public DbSet<MacroDataPoint> MacroDataPoints => Set<MacroDataPoint>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<SearchLog> SearchLogs => Set<SearchLog>();
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

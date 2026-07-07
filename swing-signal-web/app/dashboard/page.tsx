@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
 import { AssetSearch } from "@/components/AssetSearch";
 import { PopularAssets } from "@/components/PopularAssets";
+import { ProWaitlist } from "@/components/ProWaitlist";
 import { signalSeverity, summarizeRegime, MARKET_MOVER_THRESHOLD } from "@/lib/regime-insight";
 import type { MacroRegimeDto } from "@/types";
 import { AlertCircle, Star, ScrollText } from "lucide-react";
@@ -204,6 +205,8 @@ export default async function DashboardPage() {
           time, no opinions. Historical context only, not financial advice.
         </p>
       </section>
+
+      <ProWaitlist source="dashboard" />
     </div>
   );
 }

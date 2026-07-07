@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import type { AuthResponse } from "@/types";
 
 interface AuthUser {
@@ -86,12 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const auth = await api.register(email, password);
     storeSession(auth);
     setUser({ email: auth.email, plan: auth.plan });
+    track("signup_completed", { method: "email" });
   }, []);
 
   const googleLogin = useCallback(async (idToken: string) => {
     const auth = await api.googleLogin(idToken);
     storeSession(auth);
     setUser({ email: auth.email, plan: auth.plan });
+    track("signup_completed", { method: "google" });
   }, []);
 
   const logout = useCallback(() => {

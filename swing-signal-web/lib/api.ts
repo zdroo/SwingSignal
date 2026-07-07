@@ -57,8 +57,12 @@ export const api = {
   getHistoricalMatches: (topK = 10): Promise<HistoricalMatchDto[]> =>
     get(`/api/regime/matches?topK=${topK}`),
 
-  getAssetOdds: (symbol: string, topK = 10): Promise<AssetOddsDto> =>
-    get(`/api/regime/odds/${encodeURIComponent(symbol)}?topK=${topK}`),
+  getAssetOdds: (symbol: string, topK = 10, meta?: { q?: string; src?: string }): Promise<AssetOddsDto> => {
+    const params = new URLSearchParams({ topK: String(topK) });
+    if (meta?.q) params.set("q", meta.q);
+    if (meta?.src) params.set("src", meta.src);
+    return get(`/api/regime/odds/${encodeURIComponent(symbol)}?${params.toString()}`);
+  },
 
   getOddsForPeriod: (symbol: string, days: number, topK = 10): Promise<AssetPeriodOddsDto> =>
     get(`/api/regime/odds/${encodeURIComponent(symbol)}/period?days=${days}&topK=${topK}`),
@@ -101,4 +105,7 @@ export const api = {
 
   resetPassword: (token: string, newPassword: string): Promise<{ message: string }> =>
     post("/api/auth/reset-password", { token, newPassword }),
+
+  joinWaitlist: (email: string, source: string): Promise<{ message: string }> =>
+    post("/api/waitlist", { email, source }),
 };

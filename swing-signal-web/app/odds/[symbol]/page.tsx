@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { useAuth } from "@/context/AuthContext";
 import { OddsTable } from "@/components/OddsTable";
 import { AssetSearch } from "@/components/AssetSearch";
 import { PeriodPredictor } from "@/components/PeriodPredictor";
 import { BacktestPanel } from "@/components/BacktestPanel";
+import { ProWaitlist } from "@/components/ProWaitlist";
 import { AlertCircle, ArrowLeft, Info, Loader2, Lock } from "lucide-react";
 import type { AssetOddsDto, OddsForPeriodDto } from "@/types";
 import { formatPrice } from "@/lib/format";
@@ -105,6 +107,7 @@ function SignupGate({ symbol }: { symbol: string }) {
 
 export default function OddsPage() {
   const params = useParams<{ symbol: string }>();
+  const searchParams = useSearchParams();
   const symbol = decodeURIComponent(params.symbol);
   const { user, loading: authLoading } = useAuth();
 
@@ -122,14 +125,21 @@ export default function OddsPage() {
     setError(null);
 
     api
-      .getAssetOdds(symbol)
+      .getAssetOdds(symbol, 10, {
+        q: searchParams.get("q") ?? undefined,
+        src: searchParams.get("src") ?? undefined,
+      })
       .then((r) => {
         if (!cancelled) setOdds(r);
       })
       .catch((err) => {
         if (cancelled) return;
-        if (err instanceof ApiError && err.status === 401) setGated(true);
-        else setError(`Could not load odds for "${symbol}". New symbols take a few seconds to fetch — try again shortly.`);
+        if (err instanceof ApiError && err.status === 401) {
+          setGated(true);
+          track("gate_hit", { gate: "symbol", symbol });
+        } else {
+          setError(`Could not load odds for "${symbol}". New symbols take a few seconds to fetch — try again shortly.`);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -138,6 +148,7 @@ export default function OddsPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, authLoading, user?.email]);
 
   return (
@@ -215,6 +226,8 @@ export default function OddsPage() {
           </section>
 
           <BacktestPanel symbol={odds.symbol} />
+
+          <ProWaitlist source="odds-page" />
 
           <p className="text-xs text-zinc-500 dark:text-zinc-600">{odds.disclaimer}</p>
         </>

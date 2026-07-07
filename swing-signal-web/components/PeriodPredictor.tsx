@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { formatPrice } from "@/lib/format";
 import type { AssetPeriodOddsDto } from "@/types";
 import { Loader2, AlertCircle, Lock } from "lucide-react";
@@ -70,8 +71,12 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
         })
         .catch((err) => {
           if (cancelled) return;
-          if (err instanceof ApiError && err.status === 401) setGated(true);
-          else setError("Could not compute odds for this period.");
+          if (err instanceof ApiError && err.status === 401) {
+            setGated(true);
+            track("gate_hit", { gate: "custom-window", symbol });
+          } else {
+            setError("Could not compute odds for this period.");
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);

@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using SwingSignal.Application.Abstractions.Ingestion;
+using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Common;
 using SwingSignal.Application.Odds;
 using SwingSignal.Application.Regime;
+using SwingSignal.Domain.Entities;
 
 namespace SwingSignal.Api.Controllers;
 
@@ -17,15 +20,48 @@ public class RegimeController : ControllerBase
     private readonly IMacroRegimeService _regime;
     private readonly IHistoricalOddsService _odds;
     private readonly IAssetIngestionService _ingestion;
+    private readonly IAnalyticsRepository _analytics;
+    private readonly ILogger<RegimeController> _logger;
 
     public RegimeController(
         IMacroRegimeService regime,
         IHistoricalOddsService odds,
-        IAssetIngestionService ingestion)
+        IAssetIngestionService ingestion,
+        IAnalyticsRepository analytics,
+        ILogger<RegimeController> logger)
     {
         _regime    = regime;
         _odds      = odds;
         _ingestion = ingestion;
+        _analytics = analytics;
+        _logger    = logger;
+    }
+
+    private Guid? CurrentUserId()
+    {
+        var sub = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        return Guid.TryParse(sub, out var id) ? id : null;
+    }
+
+    // Best-effort demand logging — must never fail the request
+    private async Task LogSearchAsync(string symbol, string? rawQuery, string? source, bool wasGated, CancellationToken ct)
+    {
+        try
+        {
+            await _analytics.LogSearchAsync(new SearchLog
+            {
+                Symbol = symbol,
+                RawQuery = string.IsNullOrWhiteSpace(rawQuery) ? null : rawQuery[..Math.Min(rawQuery.Length, 200)],
+                Source = string.IsNullOrWhiteSpace(source) ? "direct" : source,
+                UserId = CurrentUserId(),
+                WasGated = wasGated,
+                CreatedAt = DateTime.UtcNow
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Search logging failed for {Symbol}", symbol);
+        }
     }
 
     [HttpGet("current")]
@@ -46,12 +82,22 @@ public class RegimeController : ControllerBase
     }
 
     [HttpGet("odds/{symbol}")]
-    public async Task<IActionResult> GetOdds(string symbol, [FromQuery] int topK = 10, CancellationToken ct = default)
+    public async Task<IActionResult> GetOdds(
+        string symbol,
+        [FromQuery] int topK = 10,
+        [FromQuery] string? q = null,
+        [FromQuery] string? src = null,
+        CancellationToken ct = default)
     {
         var normalized = SymbolNormalizer.Normalize(symbol);
 
         if (!FlagshipSymbols.Contains(normalized) && User.Identity?.IsAuthenticated != true)
+        {
+            await LogSearchAsync(normalized, q, src, wasGated: true, ct);
             return Unauthorized("Create a free account to analyze any symbol.");
+        }
+
+        await LogSearchAsync(normalized, q, src, wasGated: false, ct);
 
         var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
         if (asset is null)

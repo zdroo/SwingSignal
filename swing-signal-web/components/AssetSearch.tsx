@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import type { SymbolSearchResultDto } from "@/types";
 import { Search, Loader2 } from "lucide-react";
 
@@ -72,20 +73,23 @@ export function AssetSearch() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const navigate = (symbol: string) => {
+  const navigate = (symbol: string, source: string) => {
     const s = symbol.trim();
     if (!s) return;
     setOpen(false);
+    track("search_performed", { symbol: s, source });
+    const params = new URLSearchParams({ src: source });
+    if (value.trim() && value.trim().toUpperCase() !== s.toUpperCase()) params.set("q", value.trim());
     startTransition(() => {
-      router.push(`/odds/${encodeURIComponent(s)}`);
+      router.push(`/odds/${encodeURIComponent(s)}?${params.toString()}`);
     });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (highlighted >= 0 && results[highlighted]) navigate(results[highlighted].symbol);
-    else if (results.length > 0 && open) navigate(results[0].symbol);
-    else navigate(value);
+    if (highlighted >= 0 && results[highlighted]) navigate(results[highlighted].symbol, "autocomplete");
+    else if (results.length > 0 && open) navigate(results[0].symbol, "autocomplete");
+    else navigate(value, "search");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -128,7 +132,7 @@ export function AssetSearch() {
                   <button
                     type="button"
                     onMouseEnter={() => setHighlighted(i)}
-                    onClick={() => navigate(r.symbol)}
+                    onClick={() => navigate(r.symbol, "autocomplete")}
                     className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors ${
                       i === highlighted
                         ? "bg-zinc-100 dark:bg-zinc-800"
@@ -170,7 +174,7 @@ export function AssetSearch() {
         {POPULAR.map((s) => (
           <button
             key={s}
-            onClick={() => navigate(s)}
+            onClick={() => navigate(s, "popular")}
             className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 transition-colors hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             {s}

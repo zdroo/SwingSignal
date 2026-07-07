@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ICandleRepository, CandleRepository>();
         services.AddScoped<IMacroRepository, MacroRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 
         // Security
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
