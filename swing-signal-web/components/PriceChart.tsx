@@ -12,7 +12,7 @@ import {
 import { api } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 import type { AnalogPointDto } from "@/types";
-import { LineChart, Loader2 } from "lucide-react";
+import { LineChart, Loader2, Info } from "lucide-react";
 
 // Price history with the historical macro analogs marked on it — the visual
 // explanation of the whole methodology: "these are the moments history says
@@ -144,6 +144,29 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
         <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
           <LineChart className="h-4 w-4 text-zinc-500" />
           Price History
+          <span className="group relative inline-flex">
+            <Info className="h-3.5 w-3.5 cursor-help text-zinc-400" />
+            <span className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-80 -translate-x-1/2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
+              <span className="block text-xs font-semibold text-zinc-900 dark:text-white">
+                What the dot colors mean
+              </span>
+              <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-600 dark:text-zinc-300">
+                The <strong>200-day average</strong> is the average closing price over the previous
+                200 days — a widely-watched line for an asset&apos;s long-term trend.
+              </span>
+              <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-600 dark:text-zinc-300">
+                A <span className="font-medium text-sky-600 dark:text-sky-400">blue</span> dot means
+                price sat <strong>above</strong> that line at the time — generally read as a healthy
+                or bullish long-term trend. An{" "}
+                <span className="font-medium text-amber-600 dark:text-amber-400">amber</span> dot means
+                price was <strong>below</strong> it — a weak or bearish long-term trend.
+              </span>
+              <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-500">
+                It&apos;s a slow, lagging line, so a price mid-fall can still be above it for weeks.
+                We show this only as context — it doesn&apos;t change the odds.
+              </span>
+            </span>
+          </span>
         </h2>
         {markerStats.above + markerStats.below + markerStats.unknown > 0 && (
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
