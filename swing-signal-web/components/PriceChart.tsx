@@ -11,12 +11,15 @@ import {
 } from "lightweight-charts";
 import { api } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
+import type { AnalogPointDto } from "@/types";
 import { LineChart, Loader2 } from "lucide-react";
 
 // Price history with the historical macro analogs marked on it — the visual
 // explanation of the whole methodology: "these are the moments history says
 // look like today, and the odds come from what happened after each one."
-export function PriceChart({ symbol }: { symbol: string }) {
+// Dots are colored by the asset's own price state at the time (uptrend vs
+// downtrend), which explains why analogs precede both rises and falls.
+export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: AnalogPointDto[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -59,8 +62,13 @@ export function PriceChart({ symbol }: { symbol: string }) {
     });
     seriesRef.current = series;
 
-    Promise.all([api.getCandles(symbol), api.getHistoricalMatches(40)])
-      .then(([candles, matches]) => {
+    const analogsPromise = analogs
+      ? Promise.resolve(analogs)
+      : api.getHistoricalMatches(40).then((ms) =>
+          ms.map((m): AnalogPointDto => ({ date: m.date, aboveMa200: null })));
+
+    Promise.all([api.getCandles(symbol), analogsPromise])
+      .then(([candles, analogPoints]) => {
         if (cancelled || candles.length === 0) return;
 
         const points = candles.map((c) => ({
@@ -69,18 +77,19 @@ export function PriceChart({ symbol }: { symbol: string }) {
         }));
         series.setData(points);
 
-        // Mark analog dates that fall inside this asset's price history
+        // Mark analog dates inside this asset's price history, colored by the
+        // asset's own state at the time: sky = uptrend, amber = downtrend
         const first = candles[0].openTime.slice(0, 10);
         const last = candles[candles.length - 1].openTime.slice(0, 10);
 
-        const markers: SeriesMarker<Time>[] = matches
-          .map((m) => m.date.slice(0, 10))
-          .filter((d) => d >= first && d <= last)
-          .sort()
-          .map((d) => ({
-            time: d as Time,
+        const markers: SeriesMarker<Time>[] = analogPoints
+          .map((a) => ({ date: a.date.slice(0, 10), above: a.aboveMa200 }))
+          .filter((a) => a.date >= first && a.date <= last)
+          .sort((x, y) => x.date.localeCompare(y.date))
+          .map((a) => ({
+            time: a.date as Time,
             position: "belowBar" as const,
-            color: "#f59e0b",
+            color: a.above === true ? "#0ea5e9" : a.above === false ? "#f59e0b" : "#71717a",
             shape: "circle" as const,
             size: 1,
           }));
@@ -102,6 +111,9 @@ export function PriceChart({ symbol }: { symbol: string }) {
       chartRef.current = null;
       seriesRef.current = null;
     };
+    // analogs arrive together with the page's odds fetch; rebuilding on its
+    // identity would recreate the chart for no visual change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
   // Recolor on theme change without rebuilding the chart
@@ -128,9 +140,15 @@ export function PriceChart({ symbol }: { symbol: string }) {
           Price History
         </h2>
         {markerCount > 0 && (
-          <p className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-            macro conditions resembled today&apos;s ({markerCount} periods shown)
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
+              analog, asset in uptrend
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+              analog, asset in downtrend
+            </span>
           </p>
         )}
       </div>

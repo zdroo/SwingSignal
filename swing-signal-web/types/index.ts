@@ -31,6 +31,22 @@ export interface OddsForPeriodDto {
   edge: number;
 }
 
+export interface AnalogPointDto {
+  date: string;
+  aboveMa200: boolean | null;
+}
+
+export interface AnalogBreakdownDto {
+  currentAboveMa200: boolean | null;
+  aboveCount: number;
+  aboveOdds3M: number | null;
+  aboveMedian3M: number | null;
+  belowCount: number;
+  belowOdds3M: number | null;
+  belowMedian3M: number | null;
+  points: AnalogPointDto[];
+}
+
 export interface AssetOddsDto {
   symbol: string;
   name: string;
@@ -41,6 +57,7 @@ export interface AssetOddsDto {
   sixMonths: OddsForPeriodDto;
   explanations: string[];
   disclaimer: string;
+  breakdown: AnalogBreakdownDto | null;
 }
 
 export interface AssetPeriodOddsDto {

@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { OddsTable } from "@/components/OddsTable";
 import { AssetSearch } from "@/components/AssetSearch";
 import { PeriodPredictor } from "@/components/PeriodPredictor";
+import { AnalogContext } from "@/components/AnalogContext";
 import { BacktestPanel } from "@/components/BacktestPanel";
 import { PriceChart } from "@/components/PriceChart";
 import { ProWaitlist } from "@/components/ProWaitlist";
@@ -191,14 +192,36 @@ export default function OddsPage() {
                 <div className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">
                   {odds.currentPrice !== null ? formatPrice(odds.currentPrice, symbol) : "—"}
                 </div>
-                <div className="text-xs text-zinc-500 mt-0.5">
-                  Based on {odds.matchesUsed} historical macro periods
+                <div className="group relative mt-0.5 flex items-center justify-end gap-1 text-xs text-zinc-500">
+                  <span>Based on {odds.matchesUsed} historical macro periods</span>
+                  <Info className="h-3 w-3 cursor-help" />
+                  {/* What "historical macro periods" actually means */}
+                  <div className="pointer-events-none absolute right-0 top-full z-30 mt-1.5 w-80 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+                    <p className="text-xs font-semibold text-zinc-900 dark:text-white">
+                      What are &quot;historical macro periods&quot;?
+                    </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                      Every month since 1990 gets a fingerprint of 26 macro indicators (Fed policy,
+                      yield curve, inflation, credit stress...). We pick the {odds.matchesUsed} months
+                      whose fingerprints most resemble today&apos;s — deduplicated so one crisis
+                      can&apos;t fill the list — and weight them by closeness.
+                    </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                      The odds on this page are simply what {odds.symbol} did in the weeks and months
+                      after those moments. The matching uses <span className="font-medium">macro conditions
+                      only</span> — not the asset&apos;s own chart — so check the &quot;Same Macro,
+                      Different Price Situations&quot; box below for how the asset&apos;s own position
+                      varied across these periods.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          <PriceChart symbol={odds.symbol} />
+          <PriceChart symbol={odds.symbol} analogs={odds.breakdown?.points} />
+
+          {odds.breakdown && <AnalogContext breakdown={odds.breakdown} symbol={odds.symbol} />}
 
           <PeriodPredictor symbol={odds.symbol} />
 

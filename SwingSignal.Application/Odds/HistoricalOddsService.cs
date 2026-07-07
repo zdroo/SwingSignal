@@ -54,8 +54,72 @@ public class HistoricalOddsService : IHistoricalOddsService
             ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90)),
             SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180)),
             Explanations: explanations,
-            Disclaimer:  Disclaimer
+            Disclaimer:  Disclaimer,
+            Breakdown:   ComputeBreakdown(candles, matches)
         );
+    }
+
+    // Splits the analogs by the asset's own price state (above/below its
+    // 200-day average) and reports each group's 3M outcomes. Descriptive
+    // context only: this split looked predictive in-sample but failed our
+    // walk-forward validation, so it does NOT influence the headline odds.
+    private static AnalogBreakdownDto ComputeBreakdown(
+        List<Candle> candles, List<HistoricalMatchDto> matches)
+    {
+        const int horizonDays = 90;
+        var exitWindow = CandleMath.ExitWindow(horizonDays);
+
+        var points = new List<AnalogPointDto>();
+        var aboveReturns = new List<decimal>();
+        var belowReturns = new List<decimal>();
+
+        foreach (var match in matches)
+        {
+            var idx = CandleMath.FindNearestIndex(candles, match.Date, 7);
+            if (idx < 0) continue;
+
+            var above = AboveMa200At(candles, idx);
+            points.Add(new AnalogPointDto(match.Date, above));
+
+            if (above is null) continue;
+
+            var exit = CandleMath.FindNearest(candles, match.Date.AddDays(horizonDays), exitWindow);
+            if (exit is null || exit.OpenTime <= candles[idx].OpenTime) continue;
+
+            var ret = CandleMath.PercentReturn(candles[idx].Close, exit.Close);
+            (above.Value ? aboveReturns : belowReturns).Add(ret);
+        }
+
+        return new AnalogBreakdownDto(
+            CurrentAboveMa200: AboveMa200At(candles, candles.Count - 1),
+            AboveCount: aboveReturns.Count,
+            AboveOdds3M: GroupOdds(aboveReturns),
+            AboveMedian3M: GroupMedian(aboveReturns),
+            BelowCount: belowReturns.Count,
+            BelowOdds3M: GroupOdds(belowReturns),
+            BelowMedian3M: GroupMedian(belowReturns),
+            Points: points);
+    }
+
+    private static bool? AboveMa200At(List<Candle> candles, int index)
+    {
+        if (index < 200) return null;
+
+        decimal sum = 0;
+        for (var i = index - 199; i <= index; i++)
+            sum += candles[i].Close;
+
+        return candles[index].Close >= sum / 200;
+    }
+
+    private static double? GroupOdds(List<decimal> returns) =>
+        returns.Count == 0 ? null : Math.Round((double)returns.Count(r => r > 0) / returns.Count * 100, 1);
+
+    private static decimal? GroupMedian(List<decimal> returns)
+    {
+        if (returns.Count == 0) return null;
+        var sorted = returns.OrderBy(r => r).ToList();
+        return sorted[sorted.Count / 2];
     }
 
     public async Task<AssetPeriodOddsDto> GetOddsForDaysAsync(string symbol, int days, int topK = 10, CancellationToken ct = default)

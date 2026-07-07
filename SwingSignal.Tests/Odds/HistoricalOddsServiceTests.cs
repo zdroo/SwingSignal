@@ -115,6 +115,40 @@ public class HistoricalOddsServiceTests
     }
 
     [Fact]
+    public async Task GetOddsAsync_BreakdownSplitsAnalogsByMa200State()
+    {
+        var candles = RisingCandles();
+        // Analog 1 at index 100: fewer than 200 prior candles => state unknown (null).
+        // Analog 2 at index 200: rising series => price above its 200-day average.
+        var matches = new List<HistoricalMatchDto>
+        {
+            Match(Start.AddDays(100), 50.0),
+            Match(Start.AddDays(200), 50.0),
+        };
+        var service = BuildService(candles, matches, out _);
+
+        var result = await service.GetOddsAsync("SPY");
+        var breakdown = result.Breakdown;
+
+        Assert.NotNull(breakdown);
+        Assert.Equal(true, breakdown.CurrentAboveMa200); // rising series ends above its MA
+
+        // Only the index-200 analog has a known state; its 3M return: (291-201)/201 = 44.78%
+        Assert.Equal(1, breakdown.AboveCount);
+        Assert.Equal(100.0, breakdown.AboveOdds3M);
+        Assert.Equal(44.78m, breakdown.AboveMedian3M);
+        Assert.Equal(0, breakdown.BelowCount);
+        Assert.Null(breakdown.BelowOdds3M);
+        Assert.Null(breakdown.BelowMedian3M);
+
+        Assert.Equal(2, breakdown.Points.Count);
+        Assert.Equal(Start.AddDays(100), breakdown.Points[0].Date);
+        Assert.Null(breakdown.Points[0].AboveMa200);
+        Assert.Equal(Start.AddDays(200), breakdown.Points[1].Date);
+        Assert.Equal(true, breakdown.Points[1].AboveMa200);
+    }
+
+    [Fact]
     public async Task GetOddsAsync_UnknownSymbol_ThrowsWithExactMessage()
     {
         var assets = new Mock<IAssetRepository>();
