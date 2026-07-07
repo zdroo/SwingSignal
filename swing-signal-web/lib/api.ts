@@ -5,6 +5,7 @@ import type {
   AuthResponse,
   BacktestComparisonDto,
   BacktestResultDto,
+  CandleDto,
   HistoricalMatchDto,
   MacroRegimeDto,
   PopularAssetDto,
@@ -74,6 +75,9 @@ export const api = {
 
   getAssets: (): Promise<AssetDto[]> =>
     get("/api/assets"),
+
+  getCandles: (symbol: string, limit = 10000): Promise<CandleDto[]> =>
+    get(`/api/candles/${encodeURIComponent(symbol)}?interval=OneDay&limit=${limit}`),
 
   searchSymbols: (q: string): Promise<SymbolSearchResultDto[]> =>
     get(`/api/assets/search?q=${encodeURIComponent(q)}`),

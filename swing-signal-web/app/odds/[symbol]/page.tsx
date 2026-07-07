@@ -10,6 +10,7 @@ import { OddsTable } from "@/components/OddsTable";
 import { AssetSearch } from "@/components/AssetSearch";
 import { PeriodPredictor } from "@/components/PeriodPredictor";
 import { BacktestPanel } from "@/components/BacktestPanel";
+import { PriceChart } from "@/components/PriceChart";
 import { ProWaitlist } from "@/components/ProWaitlist";
 import { AlertCircle, ArrowLeft, Info, Loader2, Lock } from "lucide-react";
 import type { AssetOddsDto, OddsForPeriodDto } from "@/types";
@@ -196,6 +197,8 @@ export default function OddsPage() {
               </div>
             )}
           </div>
+
+          <PriceChart symbol={odds.symbol} />
 
           <PeriodPredictor symbol={odds.symbol} />
 

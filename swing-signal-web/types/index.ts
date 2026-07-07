@@ -83,6 +83,15 @@ export interface BacktestComparisonDto {
   summary: string;
 }
 
+export interface CandleDto {
+  openTime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface UserProfileDto {
   email: string;
   plan: string;

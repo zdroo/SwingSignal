@@ -74,8 +74,9 @@ public class RegimeController : ControllerBase
     [HttpGet("matches")]
     public async Task<IActionResult> GetMatches([FromQuery] int topK = 10, CancellationToken ct = default)
     {
-        if (topK is < 1 or > 20)
-            return BadRequest("topK must be between 1 and 20");
+        // Cap matches the analog count the odds engine itself uses
+        if (topK is < 1 or > MatchingOptions.AnalogCount)
+            return BadRequest($"topK must be between 1 and {MatchingOptions.AnalogCount}");
 
         var matches = await _regime.FindSimilarPeriodsAsync(topK, ct);
         return Ok(matches);
