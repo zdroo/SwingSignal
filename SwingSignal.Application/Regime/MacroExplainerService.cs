@@ -1,4 +1,5 @@
 using SwingSignal.Contracts.Regime;
+using SwingSignal.Domain.Entities;
 using SwingSignal.Domain.Enums;
 
 namespace SwingSignal.Application.Regime;
@@ -13,6 +14,7 @@ public class MacroExplainerService : IAssetExplainerService
         string symbol,
         MarketType marketType,
         List<HistoricalMatchDto> matches,
+        List<Candle>? candles = null,
         CancellationToken ct = default)
     {
         var regime = await _regime.GetCurrentRegimeAsync(ct);
@@ -27,9 +29,25 @@ public class MacroExplainerService : IAssetExplainerService
         AddCreditStressBullet(bullets, regime);
         AddGoldBullet(bullets, regime);
         AddAssetTypeBullet(bullets, regime, marketType);
+        AddCryptoCycleBullets(bullets, marketType, candles);
         AddMatchesBullet(bullets, matches);
 
         return bullets;
+    }
+
+    // Crypto-native cycle context — needs no external data sources
+    private static void AddCryptoCycleBullets(List<string> bullets, MarketType marketType, List<Candle>? candles)
+    {
+        if (marketType != MarketType.Crypto) return;
+
+        var halving = CryptoCycle.HalvingBullet(DateTime.UtcNow);
+        if (halving is not null) bullets.Add(halving);
+
+        if (candles is not null)
+        {
+            var mayer = CryptoCycle.MayerBullet(candles);
+            if (mayer is not null) bullets.Add(mayer);
+        }
     }
 
     private static void AddFedBullet(List<string> bullets, MacroRegimeDto regime)

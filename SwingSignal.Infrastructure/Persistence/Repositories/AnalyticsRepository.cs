@@ -31,6 +31,11 @@ public class AnalyticsRepository : IAnalyticsRepository
         return rows.Select(r => (r.Symbol, r.Views)).ToList();
     }
 
+    public Task DetachUserAsync(Guid userId, CancellationToken ct = default) =>
+        _context.SearchLogs
+            .Where(s => s.UserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UserId, (Guid?)null), ct);
+
     public async Task<bool> AddToWaitlistAsync(WaitlistEntry entry, CancellationToken ct = default)
     {
         var exists = await _context.WaitlistEntries.AnyAsync(w => w.Email == entry.Email, ct);

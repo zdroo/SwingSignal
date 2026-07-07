@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Domain.Enums;
 
@@ -17,7 +18,15 @@ public record MatchResult(
 // Keeping it in one place guarantees the backtest measures exactly what production does.
 public class MacroSnapshotBuilder
 {
+    // Snapshots only change when new macro data is ingested (daily), but they
+    // are rebuilt from thousands of DB rows on every odds/backtest call.
+    // Caching them is the single biggest latency win in the app.
+    private const string CacheKey = "macro-monthly-snapshots";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
+    private static readonly TimeSpan EmptyCacheTtl = TimeSpan.FromMinutes(1); // first ingestion may still be running
+
     private readonly IMacroRepository _macro;
+    private readonly IMemoryCache _cache;
 
     public static readonly MacroIndicatorType[] VectorIndicators =
     [
@@ -138,11 +147,31 @@ public class MacroSnapshotBuilder
 
     private const int MinSharedFamilies = 5;
 
-    public MacroSnapshotBuilder(IMacroRepository macro) => _macro = macro;
+    public MacroSnapshotBuilder(IMacroRepository macro, IMemoryCache cache)
+    {
+        _macro = macro;
+        _cache = cache;
+    }
 
-    // Builds one snapshot per month using forward-filled values.
-    // YoY-transformed indicators are stored as % change vs the same month a year earlier.
+    // Builds one snapshot per month using forward-filled values, cached for an
+    // hour (the source data changes at most daily).
     public async Task<List<MonthlySnapshot>> BuildAllAsync(CancellationToken ct = default)
+    {
+        if (_cache.TryGetValue(CacheKey, out List<MonthlySnapshot>? cached) && cached is not null)
+            return cached;
+
+        var snapshots = await BuildUncachedAsync(ct);
+
+        // A near-empty result usually means the first ingestion hasn't finished —
+        // don't pin that state for a full hour.
+        var ttl = snapshots.Count >= 12 ? CacheTtl : EmptyCacheTtl;
+        _cache.Set(CacheKey, snapshots, ttl);
+
+        return snapshots;
+    }
+
+    // YoY-transformed indicators are stored as % change vs the same month a year earlier.
+    private async Task<List<MonthlySnapshot>> BuildUncachedAsync(CancellationToken ct)
     {
         var allPoints = await _macro.GetForTypesAsync(VectorIndicators, ct);
 

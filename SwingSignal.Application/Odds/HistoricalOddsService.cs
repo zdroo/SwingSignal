@@ -43,7 +43,7 @@ public class HistoricalOddsService : IHistoricalOddsService
         var currentPrice = candles[^1].Close;
         var weighted = ConditionOnAssetState(candles, ApplyKernelWeights(matches));
 
-        var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, ct);
+        var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
         return new AssetOddsDto(
             Symbol:      asset.Symbol,

@@ -22,7 +22,10 @@ export function UserMenu() {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="hidden items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 sm:flex">
+      <Link
+        href="/account"
+        className="hidden items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 transition-colors hover:text-zinc-900 dark:hover:text-zinc-200 sm:flex"
+      >
         <User className="h-3.5 w-3.5" />
         {user.email}
         {user.plan === "Pro" && (
@@ -30,7 +33,7 @@ export function UserMenu() {
             Pro
           </span>
         )}
-      </span>
+      </Link>
       <button
         onClick={logout}
         title="Log out"

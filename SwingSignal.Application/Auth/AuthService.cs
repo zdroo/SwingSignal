@@ -220,6 +220,40 @@ public class AuthService : IAuthService
         await _users.UpdateAsync(user, ct);
     }
 
+    public async Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _users.GetByIdAsync(userId, ct)
+            ?? throw new KeyNotFoundException("Account not found.");
+
+        return new UserProfileDto(user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt);
+    }
+
+    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+            throw new ArgumentException("Password must be at least 8 characters.");
+
+        var user = await _users.GetByIdAsync(userId, ct)
+            ?? throw new KeyNotFoundException("Account not found.");
+
+        // Google-created accounts have a random hash the user never knew — they
+        // set their first password through the reset flow, not here.
+        if (!_passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
+            throw new UnauthorizedAccessException("Current password is incorrect.");
+
+        user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
+        IssueRefreshToken(user); // invalidate other sessions
+        await _users.UpdateAsync(user, ct);
+    }
+
+    public async Task DeleteAccountAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _users.GetByIdAsync(userId, ct)
+            ?? throw new KeyNotFoundException("Account not found.");
+
+        await _users.DeleteAsync(user, ct);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private static void IssueRefreshToken(User user)

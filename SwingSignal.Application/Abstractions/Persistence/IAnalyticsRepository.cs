@@ -11,4 +11,7 @@ public interface IAnalyticsRepository
 
     /// Adds an email to the Pro waitlist. Returns false when already present (idempotent).
     Task<bool> AddToWaitlistAsync(WaitlistEntry entry, CancellationToken ct = default);
+
+    /// GDPR: unlinks a deleted user's search history (rows stay, user reference goes).
+    Task DetachUserAsync(Guid userId, CancellationToken ct = default);
 }

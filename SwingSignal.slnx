@@ -4,4 +4,5 @@
   <Project Path="SwingSignal.Contracts/SwingSignal.Contracts.csproj" />
   <Project Path="SwingSignal.Domain/SwingSignal.Domain.csproj" />
   <Project Path="SwingSignal.Infrastructure/SwingSignal.Infrastructure.csproj" />
+  <Project Path="SwingSignal.Tests/SwingSignal.Tests.csproj" />
 </Solution>

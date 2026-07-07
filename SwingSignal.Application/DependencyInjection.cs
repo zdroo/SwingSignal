@@ -11,6 +11,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        services.AddMemoryCache(); // snapshot cache (idempotent if the host also registers it)
         services.AddScoped<MacroSnapshotBuilder>();
         services.AddScoped<IMacroRegimeService, MacroRegimeService>();
         services.AddScoped<IAssetExplainerService, MacroExplainerService>();

@@ -13,4 +13,8 @@ public interface IAuthService
     Task ResendConfirmationAsync(ResendConfirmationRequest request, CancellationToken ct = default);
     Task ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken ct = default);
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default);
+
+    Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default);
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default);
+    Task DeleteAccountAsync(Guid userId, CancellationToken ct = default);
 }

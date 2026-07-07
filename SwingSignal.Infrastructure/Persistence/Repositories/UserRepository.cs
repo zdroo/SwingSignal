@@ -10,6 +10,9 @@ public class UserRepository : IUserRepository
 
     public UserRepository(SwingSignalDbContext context) => _context = context;
 
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        _context.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+
     public Task<User?> GetByEmailAsync(string email, CancellationToken ct = default) =>
         _context.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
 
@@ -38,4 +41,10 @@ public class UserRepository : IUserRepository
 
     public Task UpdateAsync(User user, CancellationToken ct = default) =>
         _context.SaveChangesAsync(ct);
+
+    public async Task DeleteAsync(User user, CancellationToken ct = default)
+    {
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync(ct);
+    }
 }

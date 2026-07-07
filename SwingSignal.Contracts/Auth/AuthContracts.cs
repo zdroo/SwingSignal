@@ -18,6 +18,10 @@ public record ResetPasswordRequest(string Token, string NewPassword);
 
 public record WaitlistRequest(string Email, string? Source);
 
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+public record UserProfileDto(string Email, string Plan, bool IsEmailConfirmed, DateTime CreatedAt);
+
 public record AuthResponse(
     string AccessToken,
     string RefreshToken,

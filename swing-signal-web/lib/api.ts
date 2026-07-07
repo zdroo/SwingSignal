@@ -9,6 +9,7 @@ import type {
   MacroRegimeDto,
   PopularAssetDto,
   SymbolSearchResultDto,
+  UserProfileDto,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://localhost:7260";
@@ -37,11 +38,11 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -49,6 +50,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
   return res.json();
 }
+
+const post = <T,>(path: string, body: unknown): Promise<T> => send<T>("POST", path, body);
+const put = <T,>(path: string, body: unknown): Promise<T> => send<T>("PUT", path, body);
+const del = <T,>(path: string): Promise<T> => send<T>("DELETE", path);
 
 export const api = {
   getCurrentRegime: (): Promise<MacroRegimeDto> =>
@@ -108,4 +113,13 @@ export const api = {
 
   joinWaitlist: (email: string, source: string): Promise<{ message: string }> =>
     post("/api/waitlist", { email, source }),
+
+  getProfile: (): Promise<UserProfileDto> =>
+    get("/api/users/me"),
+
+  changePassword: (currentPassword: string, newPassword: string): Promise<{ message: string }> =>
+    put("/api/users/me/password", { currentPassword, newPassword }),
+
+  deleteAccount: (): Promise<{ message: string }> =>
+    del("/api/users/me"),
 };

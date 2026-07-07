@@ -83,6 +83,13 @@ export interface BacktestComparisonDto {
   summary: string;
 }
 
+export interface UserProfileDto {
+  email: string;
+  plan: string;
+  isEmailConfirmed: boolean;
+  createdAt: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
