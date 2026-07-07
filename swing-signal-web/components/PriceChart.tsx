@@ -27,7 +27,7 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
   const { theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [markerCount, setMarkerCount] = useState(0);
+  const [markerStats, setMarkerStats] = useState({ above: 0, below: 0, unknown: 0, offChart: 0 });
 
   // Create the chart + load data once per symbol
   useEffect(() => {
@@ -82,20 +82,26 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
         const first = candles[0].openTime.slice(0, 10);
         const last = candles[candles.length - 1].openTime.slice(0, 10);
 
-        const markers: SeriesMarker<Time>[] = analogPoints
+        const inRange = analogPoints
           .map((a) => ({ date: a.date.slice(0, 10), above: a.aboveMa200 }))
           .filter((a) => a.date >= first && a.date <= last)
-          .sort((x, y) => x.date.localeCompare(y.date))
-          .map((a) => ({
-            time: a.date as Time,
-            position: "belowBar" as const,
-            color: a.above === true ? "#0ea5e9" : a.above === false ? "#f59e0b" : "#71717a",
-            shape: "circle" as const,
-            size: 1,
-          }));
+          .sort((x, y) => x.date.localeCompare(y.date));
+
+        const markers: SeriesMarker<Time>[] = inRange.map((a) => ({
+          time: a.date as Time,
+          position: "belowBar" as const,
+          color: a.above === true ? "#0ea5e9" : a.above === false ? "#f59e0b" : "#71717a",
+          shape: "circle" as const,
+          size: 1,
+        }));
 
         series.setMarkers(markers);
-        setMarkerCount(markers.length);
+        setMarkerStats({
+          above: inRange.filter((a) => a.above === true).length,
+          below: inRange.filter((a) => a.above === false).length,
+          unknown: inRange.filter((a) => a.above === null).length,
+          offChart: analogPoints.length - inRange.length,
+        });
         chart.timeScale().fitContent();
       })
       .catch(() => {
@@ -139,16 +145,26 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
           <LineChart className="h-4 w-4 text-zinc-500" />
           Price History
         </h2>
-        {markerCount > 0 && (
+        {markerStats.above + markerStats.below + markerStats.unknown > 0 && (
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
-              analog, asset in uptrend
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-              analog, asset in downtrend
-            </span>
+            {markerStats.above > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
+                analog, asset in uptrend ({markerStats.above})
+              </span>
+            )}
+            {markerStats.below > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                analog, asset in downtrend ({markerStats.below})
+              </span>
+            )}
+            {markerStats.unknown > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-zinc-500" />
+                trend unknown — asset too young at the time ({markerStats.unknown})
+              </span>
+            )}
           </p>
         )}
       </div>
@@ -162,10 +178,18 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
         )}
       </div>
 
-      {markerCount > 0 && (
+      {markerStats.above + markerStats.below + markerStats.unknown > 0 && (
         <p className="mt-2 text-xs text-zinc-500">
           Each dot marks a month whose macro environment most closely resembled today&apos;s.
           The odds on this page are computed from what {symbol} did after those moments.
+          {markerStats.offChart > 0 && (
+            <>
+              {" "}
+              {markerStats.offChart} more analog{markerStats.offChart === 1 ? "" : "s"} predate{" "}
+              {symbol}&apos;s available price history and can&apos;t be shown here — for those,
+              the odds fall back to the analogs with price data.
+            </>
+          )}
         </p>
       )}
     </div>
