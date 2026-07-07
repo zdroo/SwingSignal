@@ -24,12 +24,37 @@ public class BinanceApiClient
         _logger = logger;
     }
 
+    /// Binance caps each response at 1000 klines. With a start date we page
+    /// forward until we reach the present; without one we take the most
+    /// recent page (the incremental-update case).
     public async Task<List<RawCandle>> GetCandlesAsync(
         string symbol,
         CandleInterval interval,
         DateTime? from = null,
         int limit = 1000,
         CancellationToken ct = default)
+    {
+        const int maxPages = 25; // safety: 25k candles ≈ 68 years of dailies
+
+        var all = new List<RawCandle>();
+        var cursor = from;
+
+        for (var page = 0; page < maxPages; page++)
+        {
+            var batch = await FetchPageAsync(symbol, interval, cursor, limit, ct);
+            all.AddRange(batch);
+
+            // No start date means "just the latest page"; a short page means we've caught up
+            if (cursor is null || batch.Count < limit) break;
+
+            cursor = batch[^1].OpenTime.AddMilliseconds(1);
+        }
+
+        return all;
+    }
+
+    private async Task<List<RawCandle>> FetchPageAsync(
+        string symbol, CandleInterval interval, DateTime? from, int limit, CancellationToken ct)
     {
         var intervalStr = IntervalMap[interval];
         var url = $"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={intervalStr}&limit={limit}";

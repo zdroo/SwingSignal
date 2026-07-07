@@ -57,7 +57,13 @@ public class CryptoIngestionService : BackgroundService
                         .Where(c => c.AssetId == asset.Id && c.Interval == interval)
                         .MaxAsync(c => (DateTime?)c.OpenTime, ct);
 
-                    var from = latestTime?.AddMinutes(1);
+                    // First ingestion pulls deep history (paginated). Daily candles
+                    // drive the odds/analogs, so take everything Binance has
+                    // (listings start 2017); intraday is only used for recent views.
+                    var initialWindow = interval == CandleInterval.OneDay
+                        ? DateTime.UtcNow.AddYears(-10)
+                        : DateTime.UtcNow.AddYears(-2);
+                    var from = latestTime?.AddMinutes(1) ?? initialWindow;
                     var rawCandles = await binance.GetCandlesAsync(asset.Symbol, interval, from, ct: ct);
 
                     if (rawCandles.Count == 0) continue;

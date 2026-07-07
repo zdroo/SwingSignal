@@ -74,7 +74,7 @@ public class OnDemandIngestionService : IAssetIngestionService
             List<RawCandle> raw;
 
             if (asset.MarketType == MarketType.Crypto)
-                raw = await _binance.GetCandlesAsync(asset.Symbol, CandleInterval.OneDay, DateTime.UtcNow.AddYears(-5), ct: ct);
+                raw = await _binance.GetCandlesAsync(asset.Symbol, CandleInterval.OneDay, DateTime.UtcNow.AddYears(-10), ct: ct);
             else
                 // Yahoo: take full available history (30y) for deeper backtests
                 raw = await _yahoo.GetCandlesAsync(asset.Symbol, CandleInterval.OneDay, DateTime.UtcNow.AddYears(-30), ct);
