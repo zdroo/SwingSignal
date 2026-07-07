@@ -89,4 +89,16 @@ export const api = {
 
   googleLogin: (idToken: string): Promise<AuthResponse> =>
     post("/api/auth/google", { idToken }),
+
+  confirmEmail: (token: string): Promise<{ message: string }> =>
+    post("/api/auth/confirm-email", { token }),
+
+  resendConfirmation: (email: string): Promise<{ message: string }> =>
+    post("/api/auth/resend-confirmation", { email }),
+
+  forgotPassword: (email: string): Promise<{ message: string }> =>
+    post("/api/auth/forgot-password", { email }),
+
+  resetPassword: (token: string, newPassword: string): Promise<{ message: string }> =>
+    post("/api/auth/reset-password", { token, newPassword }),
 };

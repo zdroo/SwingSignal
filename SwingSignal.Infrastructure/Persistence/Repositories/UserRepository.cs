@@ -19,6 +19,17 @@ public class UserRepository : IUserRepository
     public Task<bool> ExistsByEmailAsync(string email, CancellationToken ct = default) =>
         _context.Users.AnyAsync(u => u.Email == email, ct);
 
+    public Task<User?> GetByEmailConfirmationTokenAsync(string token, CancellationToken ct = default) =>
+        _context.Users.FirstOrDefaultAsync(u => u.EmailConfirmationToken == token, ct);
+
+    public Task<User?> GetByPasswordResetTokenAsync(string token, CancellationToken ct = default) =>
+        _context.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == token, ct);
+
+    public Task<int> DeleteUnconfirmedOlderThanAsync(DateTime cutoff, CancellationToken ct = default) =>
+        _context.Users
+            .Where(u => !u.IsEmailConfirmed && u.CreatedAt < cutoff)
+            .ExecuteDeleteAsync(ct);
+
     public async Task AddAsync(User user, CancellationToken ct = default)
     {
         _context.Users.Add(user);

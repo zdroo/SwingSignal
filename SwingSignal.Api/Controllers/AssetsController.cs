@@ -44,8 +44,10 @@ public class AssetsController : ControllerBase
         return Ok(result ?? []);
     }
 
-    // Autocomplete for the asset search box — free text to symbol
+    // Autocomplete for the asset search box — free text to symbol.
+    // Rate limited: it proxies Yahoo, and abuse could get our IP banned there.
     [HttpGet("search")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-sensitive")]
     public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/context/AuthContext";
@@ -102,6 +103,17 @@ function AuthForm() {
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {mode === "register" ? "Create account" : "Log in"}
         </button>
+
+        {mode === "login" && (
+          <div className="text-right">
+            <Link
+              href="/auth/forgot-password"
+              className="text-xs text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        )}
       </form>
 
       {GOOGLE_ENABLED && (

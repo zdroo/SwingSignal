@@ -9,6 +9,7 @@ namespace SwingSignal.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize] // account required; Pro-only once billing exists
+[Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("compute")]
 public class BacktestController : ControllerBase
 {
     private readonly IBacktestService _backtest;

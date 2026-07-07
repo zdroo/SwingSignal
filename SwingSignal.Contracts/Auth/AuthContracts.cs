@@ -8,6 +8,14 @@ public record RefreshRequest(string RefreshToken);
 
 public record GoogleLoginRequest(string IdToken);
 
+public record ConfirmEmailRequest(string Token);
+
+public record ResendConfirmationRequest(string Email);
+
+public record ForgotPasswordRequest(string Email);
+
+public record ResetPasswordRequest(string Token, string NewPassword);
+
 public record AuthResponse(
     string AccessToken,
     string RefreshToken,

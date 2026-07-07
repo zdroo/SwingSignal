@@ -1,6 +1,9 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SwingSignal.Api.Extensions;
+using SwingSignal.Api.Middleware;
 using SwingSignal.Application;
 using SwingSignal.Infrastructure;
 using SwingSignal.Infrastructure.Persistence;
@@ -14,9 +17,14 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddAppRateLimiting(builder.Environment);
 
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<SwingSignalDbContext>();
+
+var frontendUrl = builder.Configuration["Frontend:Url"] ?? "http://localhost:3000";
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins("http://localhost:3000")
+    p.WithOrigins(frontendUrl)
      .AllowAnyHeader()
      .AllowAnyMethod()));
 
@@ -46,7 +54,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SwingSignalDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 
     var seeder = scope.ServiceProvider.GetRequiredService<AssetSeeder>();
     await seeder.SeedAsync();
@@ -58,10 +66,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();

@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SwingSignal.Application.Abstractions.Email;
 using SwingSignal.Application.Abstractions.Ingestion;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Abstractions.Security;
 using SwingSignal.Infrastructure.BackgroundServices;
+using SwingSignal.Infrastructure.Email;
 using SwingSignal.Infrastructure.ExternalClients;
 using SwingSignal.Infrastructure.Ingestion;
 using SwingSignal.Infrastructure.Persistence;
@@ -32,6 +34,15 @@ public static class DependencyInjection
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton<IGoogleTokenValidator, GoogleTokenValidator>();
 
+        // Transactional email (Resend)
+        var resendApiKey = config["Resend:ApiKey"];
+        services.AddOptions();
+        services.AddHttpClient<Resend.ResendClient>()
+            .AddStandardResilienceHandler();
+        services.Configure<Resend.ResendClientOptions>(o => o.ApiToken = resendApiKey ?? "re_missing_key");
+        services.AddTransient<Resend.IResend, Resend.ResendClient>();
+        services.AddScoped<IEmailService, ResendEmailService>();
+
         // Ingestion
         services.AddScoped<IAssetIngestionService, OnDemandIngestionService>();
         services.AddScoped<AssetSeeder>();
@@ -49,6 +60,7 @@ public static class DependencyInjection
         services.AddHostedService<CryptoIngestionService>();
         services.AddHostedService<StockForexIngestionService>();
         services.AddHostedService<MarketIndicatorIngestionService>();
+        services.AddHostedService<UnconfirmedAccountCleanupService>();
 
         return services;
     }

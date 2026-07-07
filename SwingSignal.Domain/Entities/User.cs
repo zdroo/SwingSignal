@@ -10,4 +10,17 @@ public class User : BaseEntity
     public DateTime CreatedAt { get; set; }
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiry { get; set; }
+
+    // Email confirmation (unconfirmed accounts are purged after a grace period)
+    public bool IsEmailConfirmed { get; set; }
+    public string? EmailConfirmationToken { get; set; }
+    public DateTime? EmailConfirmationTokenExpiry { get; set; }
+    public DateTime? LastConfirmationEmailAt { get; set; }
+    public int ConfirmationEmailCount { get; set; }
+
+    // Password reset
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+    public DateTime? LastPasswordResetEmailAt { get; set; }
+    public int PasswordResetEmailCount { get; set; }
 }
