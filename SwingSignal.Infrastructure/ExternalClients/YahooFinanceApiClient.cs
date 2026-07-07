@@ -26,7 +26,8 @@ public class YahooFinanceApiClient
         CancellationToken ct = default)
     {
         var intervalStr = ToYahooInterval(interval);
-        var period1 = ToUnixTimestamp(from ?? DateTime.UtcNow.AddYears(-5));
+        // Yahoo serves decades of daily history — take it for deeper backtests
+        var period1 = ToUnixTimestamp(from ?? DateTime.UtcNow.AddYears(-30));
         var period2 = ToUnixTimestamp(DateTime.UtcNow);
 
         var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(symbol)}"

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Entities;
+using SwingSignal.Infrastructure.Persistence;
 using SwingSignal.Domain.Enums;
 
 namespace SwingSignal.Infrastructure.Seed;
@@ -22,7 +23,7 @@ public class AssetSeeder
         ("GLD",      "Gold ETF",         MarketType.Commodity),
         ("USO",      "Oil ETF",          MarketType.Commodity),
 
-        // Forex (Yahoo Finance — symbol format: XXXYYY=X)
+        // Forex (Yahoo Finance - symbol format: XXXYYY=X)
         ("EURUSD=X", "EUR/USD",          MarketType.Forex),
         ("GBPUSD=X", "GBP/USD",          MarketType.Forex),
         ("USDJPY=X", "USD/JPY",          MarketType.Forex),

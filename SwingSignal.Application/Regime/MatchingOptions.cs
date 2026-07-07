@@ -1,0 +1,31 @@
+namespace SwingSignal.Application.Regime;
+
+// Algorithm feature toggles, used by the backtester to compare configurations.
+// Production always runs with the validated configuration.
+public record MatchingOptions(
+    bool Decluster,
+    bool SimilarityWeighting,
+    bool FamilyWeighting,
+    bool KernelAllHistory,
+    bool ShrinkToBaseRate,
+    double? StateBandwidth)   // null = no asset-state conditioning; smaller = stricter
+{
+    // Asset-state conditioning is OFF in production: pre-2015 tuning showed gains
+    // for QQQ/GLD, but they did not survive 2015+ validation (GLD reversed to a
+    // loss). The plumbing stays for re-testing via the backtest stateH parameter.
+    public static readonly MatchingOptions Production = new(true, true, true, true, true, null);
+    public static readonly MatchingOptions Baseline = new(false, false, false, false, false, null);
+
+    // How many declustered analog periods feed the odds when KernelAllHistory is on.
+    // High enough to cover ~3 decades at 6-month spacing.
+    public const int AnalogCount = 40;
+
+    // Shrinkage of raw analog odds toward the asset's base rate.
+    // 0 = pure base rate, 1 = raw analog odds. Small samples of noisy analogs
+    // justify heavy shrinkage; revisit once discrimination is proven.
+    public const double Shrinkage = 0.4;
+
+    public string Label => this == Production ? "current"
+        : this == Baseline ? "baseline"
+        : "custom";
+}

@@ -1,10 +1,11 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Entities;
 using SwingSignal.Domain.Enums;
 using SwingSignal.Infrastructure.ExternalClients;
+using SwingSignal.Infrastructure.Persistence;
 
 namespace SwingSignal.Infrastructure.BackgroundServices;
 

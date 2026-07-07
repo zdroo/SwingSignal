@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Entities;
 using SwingSignal.Domain.Enums;
 using SwingSignal.Infrastructure.ExternalClients;
+using SwingSignal.Infrastructure.Persistence;
 
 namespace SwingSignal.Infrastructure.BackgroundServices;
 
@@ -19,11 +20,25 @@ public class MacroIngestionService : BackgroundService
         MacroIndicatorType.UnemploymentRate,
         MacroIndicatorType.CPI,
         MacroIndicatorType.GDP,
-        MacroIndicatorType.GoldPrice,
         MacroIndicatorType.OilWTI,
         MacroIndicatorType.TreasuryYield10Y,
         MacroIndicatorType.TreasuryYield2Y,
+        MacroIndicatorType.TreasuryYield3M,
+        MacroIndicatorType.FedBalanceSheet,
+        MacroIndicatorType.ReverseRepo,
+        MacroIndicatorType.RealYield10Y,
+        MacroIndicatorType.M2MoneySupply,
+        MacroIndicatorType.CorePCE,
+        MacroIndicatorType.JoblessClaims,
+        MacroIndicatorType.ConsumerSentiment,
+        MacroIndicatorType.RetailSales,
+        MacroIndicatorType.HousingStarts,
+        MacroIndicatorType.HighYieldSpread,
+        MacroIndicatorType.SahmRule,
     ];
+
+    // Deep history gives the regime matcher more periods to compare against
+    private static readonly DateTime HistoryStart = new(1990, 1, 1);
 
     public MacroIngestionService(IServiceScopeFactory scopeFactory, ILogger<MacroIngestionService> logger)
     {
@@ -46,6 +61,10 @@ public class MacroIngestionService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SwingSignalDbContext>();
         var fred = scope.ServiceProvider.GetRequiredService<FredApiClient>();
+        var dbNomics = scope.ServiceProvider.GetRequiredService<DbNomicsApiClient>();
+
+        if (!fred.IsConfigured)
+            _logger.LogWarning("No FRED API key configured - falling back to DBnomics (covers a subset of indicators)");
 
         foreach (var indicatorType in IndicatorsToIngest)
         {
@@ -57,8 +76,11 @@ public class MacroIngestionService : BackgroundService
                     .Where(m => m.IndicatorType == indicatorType)
                     .MaxAsync(m => (DateTime?)m.Date, ct);
 
-                var from = latestDate?.AddDays(1) ?? DateTime.UtcNow.AddYears(-5);
-                var observations = await fred.GetObservationsAsync(indicatorType, from, ct);
+                var from = latestDate?.AddDays(1) ?? HistoryStart;
+
+                var observations = fred.IsConfigured
+                    ? await fred.GetObservationsAsync(indicatorType, from, ct)
+                    : await dbNomics.GetObservationsAsync(indicatorType, from, ct);
 
                 if (observations.Count == 0)
                 {
@@ -79,7 +101,7 @@ public class MacroIngestionService : BackgroundService
                         IndicatorType = indicatorType,
                         Date = o.Date,
                         Value = o.Value,
-                        Source = "FRED"
+                        Source = fred.IsConfigured ? "FRED" : "DBnomics"
                     })
                     .ToList();
 
@@ -90,9 +112,18 @@ public class MacroIngestionService : BackgroundService
                     _logger.LogInformation("Ingested {Count} new points for {Indicator}", newPoints.Count, indicatorType);
                 }
 
-                // Compute yield curve spread after both yields are ingested
+                // Compute yield spreads once the component series are ingested
                 if (indicatorType == MacroIndicatorType.TreasuryYield2Y)
-                    await ComputeYieldCurveSpreadAsync(db, ct);
+                    await ComputeSpreadAsync(db,
+                        MacroIndicatorType.YieldCurveSpread,
+                        MacroIndicatorType.TreasuryYield10Y,
+                        MacroIndicatorType.TreasuryYield2Y, ct);
+
+                if (indicatorType == MacroIndicatorType.TreasuryYield3M)
+                    await ComputeSpreadAsync(db,
+                        MacroIndicatorType.YieldSpread10Y3M,
+                        MacroIndicatorType.TreasuryYield10Y,
+                        MacroIndicatorType.TreasuryYield3M, ct);
             }
             catch (Exception ex)
             {
@@ -101,29 +132,34 @@ public class MacroIngestionService : BackgroundService
         }
     }
 
-    private async Task ComputeYieldCurveSpreadAsync(SwingSignalDbContext db, CancellationToken ct)
+    private async Task ComputeSpreadAsync(
+        SwingSignalDbContext db,
+        MacroIndicatorType spreadType,
+        MacroIndicatorType longType,
+        MacroIndicatorType shortType,
+        CancellationToken ct)
     {
         var existingSpreads = (await db.MacroDataPoints
-            .Where(m => m.IndicatorType == MacroIndicatorType.YieldCurveSpread)
+            .Where(m => m.IndicatorType == spreadType)
             .Select(m => m.Date)
             .ToListAsync(ct))
             .ToHashSet();
 
-        var yield10Y = await db.MacroDataPoints
-            .Where(m => m.IndicatorType == MacroIndicatorType.TreasuryYield10Y)
+        var longSeries = await db.MacroDataPoints
+            .Where(m => m.IndicatorType == longType)
             .ToDictionaryAsync(m => m.Date, m => m.Value, ct);
 
-        var yield2Y = await db.MacroDataPoints
-            .Where(m => m.IndicatorType == MacroIndicatorType.TreasuryYield2Y)
+        var shortSeries = await db.MacroDataPoints
+            .Where(m => m.IndicatorType == shortType)
             .ToDictionaryAsync(m => m.Date, m => m.Value, ct);
 
-        var spreads = yield10Y.Keys
-            .Where(date => yield2Y.ContainsKey(date) && !existingSpreads.Contains(date))
+        var spreads = longSeries.Keys
+            .Where(date => shortSeries.ContainsKey(date) && !existingSpreads.Contains(date))
             .Select(date => new MacroDataPoint
             {
-                IndicatorType = MacroIndicatorType.YieldCurveSpread,
+                IndicatorType = spreadType,
                 Date = date,
-                Value = yield10Y[date] - yield2Y[date],
+                Value = longSeries[date] - shortSeries[date],
                 Source = "Computed"
             })
             .ToList();
@@ -132,7 +168,7 @@ public class MacroIngestionService : BackgroundService
         {
             await db.MacroDataPoints.AddRangeAsync(spreads, ct);
             await db.SaveChangesAsync(ct);
-            _logger.LogInformation("Computed {Count} yield curve spread points", spreads.Count);
+            _logger.LogInformation("Computed {Count} {SpreadType} points", spreads.Count, spreadType);
         }
     }
 }

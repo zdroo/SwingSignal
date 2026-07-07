@@ -18,18 +18,34 @@ public class FredApiClient
         [MacroIndicatorType.UnemploymentRate]  = "UNRATE",
         [MacroIndicatorType.CPI]               = "CPIAUCSL",
         [MacroIndicatorType.GDP]               = "GDP",
-        [MacroIndicatorType.GoldPrice]         = "GOLDAMGBD228NLBM",
+        // GoldPrice moved to Yahoo (GC=F) — FRED's LBMA series was discontinued
         [MacroIndicatorType.OilWTI]            = "DCOILWTICO",
         [MacroIndicatorType.TreasuryYield10Y]  = "DGS10",
         [MacroIndicatorType.TreasuryYield2Y]   = "DGS2",
+        [MacroIndicatorType.TreasuryYield3M]   = "DGS3MO",
+        [MacroIndicatorType.FedBalanceSheet]   = "WALCL",
+        [MacroIndicatorType.ReverseRepo]       = "RRPONTSYD",
+        [MacroIndicatorType.RealYield10Y]      = "DFII10",
+        [MacroIndicatorType.M2MoneySupply]     = "M2SL",
+        [MacroIndicatorType.CorePCE]           = "PCEPILFE",
+        [MacroIndicatorType.JoblessClaims]     = "ICSA",
+        [MacroIndicatorType.ConsumerSentiment] = "UMCSENT",
+        [MacroIndicatorType.RetailSales]       = "RSAFS",
+        [MacroIndicatorType.HousingStarts]     = "HOUST",
+        [MacroIndicatorType.HighYieldSpread]   = "BAMLH0A0HYM2",
+        [MacroIndicatorType.SahmRule]          = "SAHMREALTIME",
     };
 
     public FredApiClient(HttpClient http, IConfiguration config, ILogger<FredApiClient> logger)
     {
         _http = http;
-        _apiKey = config["Fred:ApiKey"] ?? throw new InvalidOperationException("Fred:ApiKey not configured");
+        _apiKey = config["Fred:ApiKey"] ?? "";
         _logger = logger;
     }
+
+    // False when the key is missing or still the placeholder — callers fall back to DBnomics
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(_apiKey) && !_apiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase);
 
     public async Task<List<(DateTime Date, decimal Value)>> GetObservationsAsync(
         MacroIndicatorType type,
