@@ -13,7 +13,7 @@ export function AnalogContext({ breakdown, symbol }: { breakdown: AnalogBreakdow
 
   const groups = [
     {
-      label: "in an uptrend (above its 200-day average)",
+      label: "trading above its 200-day average",
       dotClass: "bg-sky-500",
       count: breakdown.aboveCount,
       odds: breakdown.aboveOdds3M,
@@ -21,7 +21,7 @@ export function AnalogContext({ breakdown, symbol }: { breakdown: AnalogBreakdow
       matchesToday: current === true,
     },
     {
-      label: "in a downtrend (below its 200-day average)",
+      label: "trading below its 200-day average",
       dotClass: "bg-amber-500",
       count: breakdown.belowCount,
       odds: breakdown.belowOdds3M,
@@ -38,8 +38,10 @@ export function AnalogContext({ breakdown, symbol }: { breakdown: AnalogBreakdow
       </h2>
       <p className="mb-4 text-xs text-zinc-500">
         The macro analogs happened at very different points in {symbol}&apos;s own price cycle —
-        that&apos;s why dots on the chart appear before both rises and falls. Here is how each
-        group actually played out over the following 3 months:
+        that&apos;s why dots on the chart appear before both rises and falls. Note: &quot;above the
+        200-day average&quot; is a slow long-term measure, not &quot;currently rising&quot; — a price
+        mid-fall can stay above its lagging average for weeks. Here is how each group played out
+        over the following 3 months:
       </p>
 
       <div className="space-y-2">

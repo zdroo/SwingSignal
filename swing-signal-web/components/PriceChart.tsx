@@ -150,19 +150,19 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
             {markerStats.above > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
-                analog, asset in uptrend ({markerStats.above})
+                price above its 200-day avg ({markerStats.above})
               </span>
             )}
             {markerStats.below > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                analog, asset in downtrend ({markerStats.below})
+                price below its 200-day avg ({markerStats.below})
               </span>
             )}
             {markerStats.unknown > 0 && (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-2 w-2 rounded-full bg-zinc-500" />
-                trend unknown — asset too young at the time ({markerStats.unknown})
+                not enough history at the time ({markerStats.unknown})
               </span>
             )}
           </p>
