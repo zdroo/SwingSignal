@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { api } from "@/lib/api";
-import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
 
 export const metadata: Metadata = {
   title: "Live Macro Dashboard",
   description:
-    "26 macro indicators live: Fed policy, yield curve, inflation, credit stress and more — each explained in plain English, with the most similar historical periods.",
+    "Today's macro regime at a glance: analyze any asset, see the most similar historical periods, and get the picture in plain English.",
   alternates: { canonical: "/dashboard" },
 };
 import { AssetSearch } from "@/components/AssetSearch";
@@ -14,37 +14,7 @@ import { PopularAssets } from "@/components/PopularAssets";
 import { ProWaitlist } from "@/components/ProWaitlist";
 import { signalSeverity, summarizeRegime, MARKET_MOVER_THRESHOLD } from "@/lib/regime-insight";
 import type { MacroRegimeDto } from "@/types";
-import { AlertCircle, Star, ScrollText } from "lucide-react";
-
-// Grouped: policy & liquidity → rates → economy → market stress → commodities & sentiment
-const INDICATOR_ORDER = [
-  "FedFundsRate",
-  "RealYield10Y",
-  "FedBalanceSheet",
-  "M2MoneySupply",
-  "ReverseRepo",
-  "TreasuryYield10Y",
-  "TreasuryYield2Y",
-  "TreasuryYield3M",
-  "YieldCurveSpread",
-  "YieldSpread10Y3M",
-  "CPI",
-  "CorePCE",
-  "GDP",
-  "UnemploymentRate",
-  "JoblessClaims",
-  "SahmRule",
-  "RetailSales",
-  "HousingStarts",
-  "ConsumerSentiment",
-  "VIX",
-  "HighYieldSpread",
-  "DollarIndex",
-  "GoldPrice",
-  "OilWTI",
-  "Copper",
-  "CryptoFearGreed",
-];
+import { AlertCircle, ArrowRight, Gauge, Star, ScrollText } from "lucide-react";
 
 async function getPageData() {
   try {
@@ -78,18 +48,11 @@ export default async function DashboardPage() {
 
   const macroRegime = regime as MacroRegimeDto;
 
-  // Most market-moving readings first; family order breaks ties (stable sort)
-  const indicators = INDICATOR_ORDER
-    .filter((k) => k in macroRegime.indicators)
-    .sort(
-      (a, b) =>
-        signalSeverity(macroRegime.indicators[b].signal) -
-        signalSeverity(macroRegime.indicators[a].signal)
-    );
-
   const summary = summarizeRegime(macroRegime.indicators);
-  const moverCount = indicators.filter(
-    (k) => signalSeverity(macroRegime.indicators[k].signal) >= MARKET_MOVER_THRESHOLD
+  const readings = Object.values(macroRegime.indicators);
+  const indicatorCount = readings.length;
+  const moverCount = readings.filter(
+    (r) => signalSeverity(r.signal) >= MARKET_MOVER_THRESHOLD
   ).length;
 
   return (
@@ -131,24 +94,29 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Indicator grid — sorted by current market impact */}
+      {/* Full indicator grid lives on its own page — one glowing door to it */}
       <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Indicators</h2>
-          <p className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <Star className="h-3 w-3 fill-emerald-500 text-emerald-500" />
-            currently market-moving ({moverCount} of {indicators.length}) — sorted by impact
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {indicators.map((key) => (
-            <MacroIndicatorCard
-              key={key}
-              indicatorKey={key}
-              data={macroRegime.indicators[key]}
-            />
-          ))}
-        </div>
+        <Link
+          href="/macro"
+          className="group flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-500/40 bg-linear-to-r from-emerald-500/10 via-teal-500/5 to-emerald-500/10 p-5 transition-all duration-200 hover:border-emerald-500/70 hover:shadow-lg hover:shadow-emerald-500/15"
+        >
+          <div className="flex items-center gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
+              <Gauge className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            </span>
+            <div>
+              <div className="font-semibold text-zinc-900 dark:text-white">Live Macro Indicators</div>
+              <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+                <Star className="h-3 w-3 fill-emerald-500 text-emerald-500" />
+                {moverCount} of {indicatorCount} currently market-moving
+              </div>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-emerald-600/30 transition-all group-hover:bg-emerald-500 group-hover:shadow-emerald-500/40">
+            View all indicators
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
       </section>
 
       {/* Historical matches */}
