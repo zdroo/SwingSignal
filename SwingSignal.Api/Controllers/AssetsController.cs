@@ -30,7 +30,6 @@ public class AssetsController : ControllerBase
     public async Task<IActionResult> Popular(CancellationToken ct) =>
         Ok(await _popular.GetPopularAsync(ct));
 
-    // Autocomplete for the asset search box — free text to symbol.
     // Rate limited: it proxies Yahoo, and abuse could get our IP banned there.
     [HttpGet("search")]
     [EnableRateLimiting("public-sensitive")]

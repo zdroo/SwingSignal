@@ -69,14 +69,7 @@ public class RegimeController : ControllerBase
         if (asset is null)
             return StatusCode(503, $"Could not fetch data for symbol '{normalized}'. The symbol may not be supported.");
 
-        try
-        {
-            return Ok(await _odds.GetOddsAsync(normalized, ct));
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
+        return Ok(await _odds.GetOddsAsync(normalized, ct));
     }
 
     [HttpGet("odds/{symbol}/period")]
@@ -98,13 +91,6 @@ public class RegimeController : ControllerBase
         if (asset is null)
             return StatusCode(503, $"Could not fetch data for symbol '{normalized}'. The symbol may not be supported.");
 
-        try
-        {
-            return Ok(await _odds.GetOddsForDaysAsync(normalized, days, ct));
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
+        return Ok(await _odds.GetOddsForDaysAsync(normalized, days, ct));
     }
 }

@@ -39,6 +39,19 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+// Error bodies are either { message } (exception middleware) or a bare JSON
+// string (controller-level BadRequest) — surface the human text either way.
+function extractMessage(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === "string") return parsed;
+    if (parsed && typeof parsed.message === "string") return parsed.message;
+  } catch {
+    // not JSON — use as-is
+  }
+  return text;
+}
+
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -47,7 +60,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(res.status, text || `API error ${res.status}`);
+    throw new ApiError(res.status, extractMessage(text) || `API error ${res.status}`);
   }
   return res.json();
 }

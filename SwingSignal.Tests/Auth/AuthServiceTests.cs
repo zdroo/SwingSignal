@@ -4,6 +4,7 @@ using SwingSignal.Application.Abstractions.Email;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Abstractions.Security;
 using SwingSignal.Application.Auth;
+using SwingSignal.Application.Common;
 using SwingSignal.Contracts.Auth;
 using SwingSignal.Domain.Entities;
 using SwingSignal.Domain.Enums;
@@ -65,7 +66,7 @@ public class AuthServiceTests
         _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => BuildService().DeleteAccountAsync(userId));
+        await Assert.ThrowsAsync<NotFoundException>(() => BuildService().DeleteAccountAsync(userId));
 
         _analytics.Verify(a => a.DetachUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _users.Verify(u => u.DeleteAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -78,7 +79,7 @@ public class AuthServiceTests
     {
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
             service.RegisterAsync(new RegisterRequest("user@example.com", "short")));
 
         Assert.Equal("Password must be at least 8 characters.", ex.Message);
@@ -94,7 +95,7 @@ public class AuthServiceTests
             .ReturnsAsync(true);
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
             service.RegisterAsync(new RegisterRequest("taken@example.com", "password123")));
 
         Assert.Equal("An account with this email already exists.", ex.Message);
@@ -147,7 +148,7 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
             service.LoginAsync(new LoginRequest("user@example.com", "wrongpass")));
 
         Assert.Equal("Invalid email or password.", ex.Message);
@@ -171,7 +172,7 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
             service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com")));
 
         Assert.Equal("Please wait a minute before requesting another email.", ex.Message);
@@ -193,7 +194,7 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
             service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com")));
 
         Assert.Equal("Too many emails requested. Please try again in an hour.", ex.Message);
@@ -230,7 +231,7 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
             service.ResetPasswordAsync(new ResetPasswordRequest("TOKEN123", "newpassword1")));
 
         Assert.Equal("This reset link is invalid or has expired.", ex.Message);

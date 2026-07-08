@@ -49,15 +49,7 @@ public class BacktestController : ControllerBase
         if (asset is null)
             return StatusCode(503, $"Could not fetch data for symbol '{normalized}'.");
 
-        try
-        {
-            var result = await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, cycleH, ct);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
+        return Ok(await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, cycleH, ct));
     }
 
     // Runs the backtest twice — naive baseline vs current algorithm — to
@@ -81,14 +73,6 @@ public class BacktestController : ControllerBase
         if (asset is null)
             return StatusCode(503, $"Could not fetch data for symbol '{normalized}'.");
 
-        try
-        {
-            var result = await _backtest.CompareAsync(normalized, days, topK, null, null, ct);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
+        return Ok(await _backtest.CompareAsync(normalized, days, topK, null, null, ct));
     }
 }

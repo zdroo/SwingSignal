@@ -1,5 +1,6 @@
 using Moq;
 using SwingSignal.Application.Abstractions.Persistence;
+using SwingSignal.Application.Common;
 using SwingSignal.Application.Odds;
 using SwingSignal.Application.Regime;
 using SwingSignal.Contracts.Regime;
@@ -214,7 +215,7 @@ public class HistoricalOddsServiceTests
             Mock.Of<IMacroRegimeService>(),
             Mock.Of<IAssetExplainerService>());
 
-        var ex = await Assert.ThrowsAsync<KeyNotFoundException>(() => service.GetOddsAsync("NOPE"));
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => service.GetOddsAsync("NOPE"));
         Assert.Equal("Asset NOPE not found", ex.Message);
     }
 
@@ -225,7 +226,7 @@ public class HistoricalOddsServiceTests
     {
         var service = BuildService(RisingCandles(), [], out _);
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+        await Assert.ThrowsAsync<ValidationException>(() =>
             service.GetOddsForDaysAsync("SPY", days));
     }
 }

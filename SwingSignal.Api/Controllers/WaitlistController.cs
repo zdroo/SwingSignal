@@ -18,15 +18,7 @@ public class WaitlistController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Join([FromBody] WaitlistRequest request, CancellationToken ct)
     {
-        try
-        {
-            await _waitlist.JoinAsync(request.Email, request.Source, User.GetUserId(), ct);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-
+        await _waitlist.JoinAsync(request.Email, request.Source, User.GetUserId(), ct);
         return Ok(new { message = "You're on the list — we'll email you when Pro launches." });
     }
 }

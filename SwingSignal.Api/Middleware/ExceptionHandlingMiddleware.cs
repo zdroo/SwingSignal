@@ -1,10 +1,13 @@
 using System.Net.Mime;
 using System.Text.Json;
+using SwingSignal.Application.Common;
 
 namespace SwingSignal.Api.Middleware;
 
-/// Safety net: converts unhandled exceptions into consistent JSON error
-/// responses and guarantees no stack trace ever leaks to a client.
+/// The single place exceptions become HTTP responses: services throw
+/// AppException subtypes with a well-defined status, controllers stay free of
+/// try/catch, and no stack trace ever leaks to a client. The BCL mappings
+/// below are a safety net for framework- and library-thrown exceptions.
 public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
@@ -26,6 +29,12 @@ public class ExceptionHandlingMiddleware
         {
             var (status, message) = ex switch
             {
+                ValidationException => (StatusCodes.Status400BadRequest, ex.Message),
+                AuthenticationFailedException => (StatusCodes.Status401Unauthorized, ex.Message),
+                NotFoundException => (StatusCodes.Status404NotFound, ex.Message),
+                ConflictException => (StatusCodes.Status409Conflict, ex.Message),
+                RateLimitedException => (StatusCodes.Status429TooManyRequests, ex.Message),
+
                 ArgumentException or ArgumentOutOfRangeException => (StatusCodes.Status400BadRequest, ex.Message),
                 InvalidOperationException => (StatusCodes.Status400BadRequest, ex.Message),
                 UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, ex.Message),

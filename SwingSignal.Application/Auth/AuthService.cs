@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using SwingSignal.Application.Abstractions.Email;
+using SwingSignal.Application.Common;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Abstractions.Security;
 using SwingSignal.Contracts.Auth;
@@ -50,13 +51,13 @@ public class AuthService : IAuthService
         var email = request.Email.Trim().ToLowerInvariant();
 
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || email.Length > 256)
-            throw new ArgumentException("A valid email address is required.");
+            throw new ValidationException("A valid email address is required.");
 
         if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-            throw new ArgumentException("Password must be at least 8 characters.");
+            throw new ValidationException("Password must be at least 8 characters.");
 
         if (await _users.ExistsByEmailAsync(email, ct))
-            throw new InvalidOperationException("An account with this email already exists.");
+            throw new ConflictException("An account with this email already exists.");
 
         var user = new User
         {
@@ -81,7 +82,7 @@ public class AuthService : IAuthService
 
         var user = await _users.GetByEmailAsync(email, ct);
         if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash))
-            throw new UnauthorizedAccessException("Invalid email or password.");
+            throw new AuthenticationFailedException("Invalid email or password.");
 
         IssueRefreshToken(user);
         await _users.UpdateAsync(user, ct);
@@ -92,12 +93,12 @@ public class AuthService : IAuthService
     public async Task<AuthResponse> RefreshAsync(RefreshRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            throw new UnauthorizedAccessException("Refresh token required.");
+            throw new AuthenticationFailedException("Refresh token required.");
 
         var user = await _users.GetByRefreshTokenAsync(request.RefreshToken, ct);
 
         if (user is null || user.RefreshTokenExpiry is null || user.RefreshTokenExpiry < DateTime.UtcNow)
-            throw new UnauthorizedAccessException("Refresh token is invalid or expired.");
+            throw new AuthenticationFailedException("Refresh token is invalid or expired.");
 
         IssueRefreshToken(user);
         await _users.UpdateAsync(user, ct);
@@ -108,7 +109,7 @@ public class AuthService : IAuthService
     public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.IdToken))
-            throw new UnauthorizedAccessException("Google ID token required.");
+            throw new AuthenticationFailedException("Google ID token required.");
 
         var googleUser = await _google.ValidateAsync(request.IdToken, ct);
         var email = googleUser.Email.Trim().ToLowerInvariant();
@@ -145,12 +146,12 @@ public class AuthService : IAuthService
     public async Task ConfirmEmailAsync(ConfirmEmailRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
-            throw new ArgumentException("Confirmation token required.");
+            throw new ValidationException("Confirmation token required.");
 
         var user = await _users.GetByEmailConfirmationTokenAsync(request.Token, ct);
 
         if (user is null || user.EmailConfirmationTokenExpiry < DateTime.UtcNow)
-            throw new InvalidOperationException("This confirmation link is invalid or has expired.");
+            throw new ValidationException("This confirmation link is invalid or has expired.");
 
         var firstConfirmation = !user.IsEmailConfirmed;
 
@@ -205,12 +206,12 @@ public class AuthService : IAuthService
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
-            throw new ArgumentException("Password must be at least 8 characters.");
+            throw new ValidationException("Password must be at least 8 characters.");
 
         var user = await _users.GetByPasswordResetTokenAsync(request.Token, ct);
 
         if (user is null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
-            throw new InvalidOperationException("This reset link is invalid or has expired.");
+            throw new ValidationException("This reset link is invalid or has expired.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         user.PasswordResetToken = null;
@@ -226,7 +227,7 @@ public class AuthService : IAuthService
     public async Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _users.GetByIdAsync(userId, ct)
-            ?? throw new KeyNotFoundException("Account not found.");
+            ?? throw new NotFoundException("Account not found.");
 
         return new UserProfileDto(user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt);
     }
@@ -234,15 +235,15 @@ public class AuthService : IAuthService
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
-            throw new ArgumentException("Password must be at least 8 characters.");
+            throw new ValidationException("Password must be at least 8 characters.");
 
         var user = await _users.GetByIdAsync(userId, ct)
-            ?? throw new KeyNotFoundException("Account not found.");
+            ?? throw new NotFoundException("Account not found.");
 
         // Google-created accounts have a random hash the user never knew — they
         // set their first password through the reset flow, not here.
         if (!_passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new UnauthorizedAccessException("Current password is incorrect.");
+            throw new ValidationException("Current password is incorrect.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         IssueRefreshToken(user); // invalidate other sessions
@@ -252,7 +253,7 @@ public class AuthService : IAuthService
     public async Task DeleteAccountAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _users.GetByIdAsync(userId, ct)
-            ?? throw new KeyNotFoundException("Account not found.");
+            ?? throw new NotFoundException("Account not found.");
 
         // GDPR: unlink search history first, then remove the account
         await _analytics.DetachUserAsync(userId, ct);
@@ -291,10 +292,10 @@ public class AuthService : IAuthService
         var elapsed = DateTime.UtcNow - lastAt.Value;
 
         if (elapsed < EmailCooldown)
-            throw new InvalidOperationException("Please wait a minute before requesting another email.");
+            throw new RateLimitedException("Please wait a minute before requesting another email.");
 
         if (elapsed < EmailWindow && count >= MaxEmailsPerWindow)
-            throw new InvalidOperationException("Too many emails requested. Please try again in an hour.");
+            throw new RateLimitedException("Too many emails requested. Please try again in an hour.");
     }
 
     private static string NewToken() =>

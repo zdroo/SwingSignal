@@ -93,10 +93,10 @@ public class BacktestService : IBacktestService
         string symbol, int days, CancellationToken ct)
     {
         if (days is < 7 or > 365)
-            throw new ArgumentOutOfRangeException(nameof(days), "days must be between 7 and 365");
+            throw new ValidationException("days must be between 7 and 365");
 
         var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
-            ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
+            ?? throw new NotFoundException($"Asset {symbol.ToUpper()} not found");
 
         var snapshots = await _snapshots.BuildAllAsync(ct);
         var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);

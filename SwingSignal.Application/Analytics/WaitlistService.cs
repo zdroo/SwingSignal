@@ -1,4 +1,5 @@
 using SwingSignal.Application.Abstractions.Persistence;
+using SwingSignal.Application.Common;
 using SwingSignal.Domain.Entities;
 
 namespace SwingSignal.Application.Analytics;
@@ -17,7 +18,7 @@ public class WaitlistService : IWaitlistService
         var normalized = email.Trim().ToLowerInvariant();
 
         if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@') || normalized.Length > MaxEmailLength)
-            throw new ArgumentException("A valid email address is required.");
+            throw new ValidationException("A valid email address is required.");
 
         await _analytics.AddToWaitlistAsync(new WaitlistEntry
         {
