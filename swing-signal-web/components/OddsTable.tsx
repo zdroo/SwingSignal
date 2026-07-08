@@ -18,7 +18,44 @@ const METRIC_INFO: Record<string, string> = {
     "The single best outcome among the similar past periods. A lucky extreme that happened once — not a target.",
   "Worst Case":
     "The single worst outcome among the similar past periods. The realistic bad scenario — it actually happened once in comparable conditions.",
+  "Overall Read":
+    "A simple tally of the rows above: odds above 50%, positive regime edge, positive average return, positive median return, and Best Case larger than Worst Case. Almost all positive leans positive, almost none leans negative, anything in between is mixed. This summarizes the table — it is not an extra prediction.",
 };
+
+// The five yes/no checks the Overall Read row tallies. Descriptive only —
+// it summarizes the table's rows, it doesn't add information.
+function overallRead(d: OddsForPeriodDto) {
+  const checks = [
+    d.positiveOdds > 50,
+    ...(d.baseRate !== null ? [d.edge > 0] : []),
+    d.averageReturn > 0,
+    d.medianReturn > 0,
+    d.bestCase + d.worstCase > 0, // upside outweighed downside
+  ];
+  const positives = checks.filter(Boolean).length;
+  const total = checks.length;
+  const verdict =
+    positives >= total - 1 ? "Leans positive" : positives <= 1 ? "Leans negative" : "Mixed";
+  return { positives, total, verdict };
+}
+
+function OverallCell({ d }: { d: OddsForPeriodDto }) {
+  const { positives, total, verdict } = overallRead(d);
+  const color =
+    verdict === "Leans positive"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : verdict === "Leans negative"
+      ? "text-red-600 dark:text-red-400"
+      : "text-zinc-700 dark:text-zinc-300";
+  return (
+    <td className="px-4 py-3 text-center">
+      <div className={`text-sm font-semibold ${color}`}>{verdict}</div>
+      <div className="mt-0.5 text-xs text-zinc-500">
+        {positives} of {total} metrics positive
+      </div>
+    </td>
+  );
+}
 
 function MetricLabel({ label, emphasized = false }: { label: string; emphasized?: boolean }) {
   return (
@@ -157,6 +194,12 @@ export function OddsTable({ odds }: Props) {
             <td className="px-4 py-3"><MetricLabel label="Worst Case" /></td>
             {PERIODS.map((p) => (
               <ReturnCell key={p.key} d={odds[p.key] as OddsForPeriodDto} field="worstCase" />
+            ))}
+          </tr>
+          <tr className="bg-zinc-50 dark:bg-zinc-800/40">
+            <td className="px-4 py-3"><MetricLabel label="Overall Read" emphasized /></td>
+            {PERIODS.map((p) => (
+              <OverallCell key={p.key} d={odds[p.key] as OddsForPeriodDto} />
             ))}
           </tr>
         </tbody>

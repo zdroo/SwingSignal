@@ -230,6 +230,8 @@ export default function OddsPage() {
 
           <PeriodPredictor symbol={odds.symbol} />
 
+          <BacktestPanel symbol={odds.symbol} />
+
           <section className="space-y-6">
             <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-white">
               Standard Outlooks
@@ -253,6 +255,11 @@ export default function OddsPage() {
             <PeriodTargets label="6-Month Outlook" period={odds.sixMonths} currentPrice={odds.currentPrice} symbol={symbol} />
           </section>
 
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-white">Detailed Statistics</h2>
+            <OddsTable odds={odds} />
+          </section>
+
           {odds.explanations.length > 0 && (
             <section>
               <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-white">Why — Macro Context</h2>
@@ -266,13 +273,6 @@ export default function OddsPage() {
               </div>
             </section>
           )}
-
-          <section>
-            <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-white">Detailed Statistics</h2>
-            <OddsTable odds={odds} />
-          </section>
-
-          <BacktestPanel symbol={odds.symbol} />
 
           <ProWaitlist source="odds-page" />
 
