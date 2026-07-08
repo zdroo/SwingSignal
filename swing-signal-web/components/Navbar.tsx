@@ -18,24 +18,21 @@ export function Navbar() {
         </Link>
 
         <div className="ml-auto flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:text-zinc-900 dark:hover:text-white"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/indicators"
-            className="text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:text-zinc-900 dark:hover:text-white"
-          >
-            Learn
-          </Link>
-          <Link
-            href="/glossary"
-            className="text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:text-zinc-900 dark:hover:text-white"
-          >
-            Dictionary
-          </Link>
+          {/* Journey order: act (Dashboard) → watch (Live Macro) → learn → look up */}
+          {[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/macro", label: "Live Macro" },
+            { href: "/indicators", label: "Learn" },
+            { href: "/glossary", label: "Dictionary" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:text-zinc-900 dark:hover:text-white"
+            >
+              {item.label}
+            </Link>
+          ))}
           <ThemeToggle />
           <UserMenu />
         </div>
