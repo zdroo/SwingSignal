@@ -238,4 +238,65 @@ public class MacroSnapshotBuilderMathTests
         var cutoff = new DateTime(2021, 12, 1);
         Assert.All(matches, m => Assert.True(m.Snapshot.Date <= cutoff));
     }
+
+    [Fact]
+    public void FindMatches_MinCandidateDate_ExcludesEarlierMonths()
+    {
+        var snapshots = LinearSnapshots(30); // 2020-01 .. 2022-06
+        var floor = new DateTime(2021, 1, 1);
+
+        var matches = MacroSnapshotBuilder.FindMatches(
+            snapshots, asOfIndex: 29, topK: 24, minCandidateDate: floor);
+
+        // Eligible: 2021-01 .. 2021-12 only (12 candidates); 2020 never appears
+        Assert.All(matches, m => Assert.True(m.Snapshot.Date >= floor));
+        Assert.All(matches, m => Assert.Equal(12, m.CandidateCount));
+    }
+
+    // Six-dim filter across six families: minShared becomes 6/2 = 3, minFamilies 3
+    private static readonly MacroIndicatorType[] TestFilter =
+    [
+        MacroIndicatorType.FedFundsRate,      // family 0
+        MacroIndicatorType.TreasuryYield10Y,  // family 1
+        MacroIndicatorType.CPI,               // family 2
+        MacroIndicatorType.UnemploymentRate,  // family 3
+        MacroIndicatorType.GDP,               // family 4
+        MacroIndicatorType.VIX,               // family 5
+    ];
+
+    [Fact]
+    public void FindMatches_DimensionFilter_IgnoresExcludedDimensions()
+    {
+        // All snapshots linear in every dim, EXCEPT 2020-06: it equals the
+        // current month exactly on the filtered dims but is wildly off on the
+        // excluded GoldPrice dim.
+        var snapshots = LinearSnapshots(30);
+        var planted = Dims.ToDictionary(d => d, _ => 29m);
+        planted[MacroIndicatorType.GoldPrice] = 1000m;
+        snapshots[5] = new MonthlySnapshot(new DateTime(2020, 6, 1), planted);
+
+        var filtered = MacroSnapshotBuilder.FindMatches(
+            snapshots, asOfIndex: 29, topK: 4,
+            MatchingOptions.Production with { DimensionFilter = TestFilter });
+
+        // Gold is invisible under the filter: the planted month is a perfect match
+        Assert.Equal(new DateTime(2020, 6, 1), filtered[0].Snapshot.Date);
+        Assert.Equal(100.0, filtered[0].Similarity, precision: 6); // distance 0
+
+        var unfiltered = MacroSnapshotBuilder.FindMatches(snapshots, asOfIndex: 29, topK: 4);
+
+        // With all dims, the huge gold gap disqualifies it from the top slot
+        Assert.Equal(new DateTime(2021, 12, 1), unfiltered[0].Snapshot.Date);
+    }
+
+    [Fact]
+    public void MatchingOptions_ForMarket_SelectsProfile()
+    {
+        Assert.Same(MatchingOptions.CryptoProduction, MatchingOptions.ForMarket(MarketType.Crypto));
+        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Stock));
+        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Index));
+
+        Assert.Equal("crypto", MatchingOptions.CryptoProduction.Label);
+        Assert.Equal(MacroSnapshotBuilder.CryptoDimensions, MatchingOptions.CryptoProduction.DimensionFilter);
+    }
 }

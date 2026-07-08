@@ -37,19 +37,33 @@ public class BacktestService : IBacktestService
     public async Task<BacktestResultDto> RunAsync(
         string symbol, int days, int topK = 10,
         int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
+        string? profile = null, bool? floorHistory = null,
         CancellationToken ct = default)
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
 
+        var useCrypto = profile switch
+        {
+            "crypto"  => true,
+            "default" => false,
+            _         => asset.MarketType == Domain.Enums.MarketType.Crypto,
+        };
+
+        var baseOptions = useCrypto ? MatchingOptions.CryptoProduction : MatchingOptions.Production;
+
         // An explicit 0 disables conditioning; null keeps the production setting
-        var options = MatchingOptions.Production with
+        var options = baseOptions with
         {
             StateBandwidth = stateBandwidth is null
-                ? MatchingOptions.Production.StateBandwidth
+                ? baseOptions.StateBandwidth
                 : stateBandwidth == 0 ? null : stateBandwidth
         };
 
-        return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear);
+        var minAnalogDate = (floorHistory ?? useCrypto) && candles.Count > 0
+            ? candles[0].OpenTime
+            : (DateTime?)null;
+
+        return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear, minAnalogDate);
     }
 
     public async Task<BacktestComparisonDto> CompareAsync(
@@ -59,8 +73,15 @@ public class BacktestService : IBacktestService
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
 
+        // "current" mirrors production exactly: crypto assets use the crypto
+        // profile with history-floored analogs, everything else the full set.
+        var currentOptions = MatchingOptions.ForMarket(asset.MarketType);
+        var minAnalogDate = currentOptions.DimensionFilter is not null && candles.Count > 0
+            ? candles[0].OpenTime
+            : (DateTime?)null;
+
         var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline, fromYear, toYear);
-        var current = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Production, fromYear, toYear);
+        var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear, minAnalogDate);
 
         return new BacktestComparisonDto(baseline, current, Summarize(baseline, current));
     }
@@ -88,7 +109,8 @@ public class BacktestService : IBacktestService
         int topK,
         MatchingOptions options,
         int? fromYear = null,
-        int? toYear = null)
+        int? toYear = null,
+        DateTime? minAnalogDate = null)
     {
         var records = new List<(double PredictedOdds, bool ActualPositive)>();
         DateTime? firstDate = null, lastDate = null;
@@ -158,7 +180,7 @@ public class BacktestService : IBacktestService
             var conditionState = currentState is not null && stateStds is not null && stateStds.IsUsable;
 
             // What the algorithm (under these options) would have predicted at this time
-            var matches = MacroSnapshotBuilder.FindMatches(snapshots, i, analogCount, options);
+            var matches = MacroSnapshotBuilder.FindMatches(snapshots, i, analogCount, options, minAnalogDate);
             if (matches.Count == 0) continue;
 
             var kernelWeights = options.KernelAllHistory

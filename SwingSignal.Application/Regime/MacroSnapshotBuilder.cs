@@ -58,6 +58,34 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.CryptoFearGreed,
     ];
 
+    // The subset crypto assets match on. Crypto prices respond to dollar
+    // liquidity, real rates, the Fed path and risk appetite; US labor, housing
+    // and commodity cycles mostly contribute noise for them. Momentum dims of
+    // the kept parents are included so the *direction* of policy still counts.
+    public static readonly MacroIndicatorType[] CryptoDimensions =
+    [
+        // policy & liquidity
+        MacroIndicatorType.FedFundsRate,
+        MacroIndicatorType.RealYield10Y,
+        MacroIndicatorType.FedBalanceSheet,
+        MacroIndicatorType.M2MoneySupply,
+        MacroIndicatorType.ReverseRepo,
+        MacroIndicatorType.FedFundsMomentum6M,
+        // long rates
+        MacroIndicatorType.TreasuryYield10Y,
+        MacroIndicatorType.Yield10YMomentum6M,
+        // inflation (drives the Fed path)
+        MacroIndicatorType.CPI,
+        MacroIndicatorType.CorePCE,
+        MacroIndicatorType.CpiMomentum6M,
+        // market stress & risk appetite
+        MacroIndicatorType.VIX,
+        MacroIndicatorType.HighYieldSpread,
+        MacroIndicatorType.DollarIndex,
+        MacroIndicatorType.CryptoFearGreed,
+        MacroIndicatorType.HighYieldSpreadMomentum6M,
+    ];
+
     // Trending level series are compared as YoY % change, not raw level.
     // A raw CPI z-score would just measure "how recent is this month" — the
     // meaningful signal is the inflation RATE, not the index level.
@@ -335,7 +363,9 @@ public class MacroSnapshotBuilder
     public static double? SharedDimensionDistance(
         Dictionary<MacroIndicatorType, double> a,
         Dictionary<MacroIndicatorType, double> b,
-        bool familyWeighting = true)
+        bool familyWeighting = true,
+        int minShared = MinSharedDimensions,
+        int minFamilies = MinSharedFamilies)
     {
         var familySumSq = new Dictionary<int, double>();
         var familyCount = new Dictionary<int, int>();
@@ -354,7 +384,7 @@ public class MacroSnapshotBuilder
             shared++;
         }
 
-        if (shared < MinSharedDimensions || familyCount.Count < MinSharedFamilies)
+        if (shared < minShared || familyCount.Count < minFamilies)
             return null;
 
         if (!familyWeighting)
@@ -372,9 +402,12 @@ public class MacroSnapshotBuilder
     // Candidates must be at least 6 months older than the target month, and
     // selected matches must be at least MatchSpacingMonths apart so that one
     // macro event (e.g. late 2008) can't occupy several slots.
+    // minCandidateDate restricts analogs to months the asset was actually
+    // tradable — analogs before its listing can never be scored, so for
+    // short-history assets they only dilute the effective sample.
     public static List<MatchResult> FindMatches(
         IReadOnlyList<MonthlySnapshot> snapshots, int asOfIndex, int topK,
-        MatchingOptions? options = null)
+        MatchingOptions? options = null, DateTime? minCandidateDate = null)
     {
         options ??= MatchingOptions.Production;
 
@@ -382,15 +415,35 @@ public class MacroSnapshotBuilder
         var stats = ComputeNormalizationStats(visible);
         var currentVector = BuildZScoreVector(snapshots[asOfIndex].Values, stats);
 
-        if (currentVector.Count < MinSharedDimensions) return [];
+        // A dimension filter narrows both the vector and the validity minimums:
+        // the crypto subset has 4 families by design, so the full-set minimums
+        // would reject every candidate.
+        var minShared = MinSharedDimensions;
+        var minFamilies = MinSharedFamilies;
+
+        if (options.DimensionFilter is not null)
+        {
+            var allowed = new HashSet<MacroIndicatorType>(options.DimensionFilter);
+            currentVector = currentVector
+                .Where(kv => allowed.Contains(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+            minShared = Math.Min(MinSharedDimensions, options.DimensionFilter.Length / 2);
+            minFamilies = 3;
+        }
+
+        if (currentVector.Count < minShared) return [];
 
         var cutoff = snapshots[asOfIndex].Date.AddMonths(-6);
         var candidates = new List<(MonthlySnapshot Snapshot, double Similarity)>();
 
-        foreach (var candidate in visible.Where(s => s.Date <= cutoff))
+        foreach (var candidate in visible.Where(s =>
+                     s.Date <= cutoff &&
+                     (minCandidateDate is null || s.Date >= minCandidateDate)))
         {
             var vector = BuildZScoreVector(candidate.Values, stats);
-            var distance = SharedDimensionDistance(currentVector, vector, options.FamilyWeighting);
+            var distance = SharedDimensionDistance(
+                currentVector, vector, options.FamilyWeighting, minShared, minFamilies);
             if (distance is null) continue;
 
             candidates.Add((candidate, 100.0 / (1.0 + distance.Value)));

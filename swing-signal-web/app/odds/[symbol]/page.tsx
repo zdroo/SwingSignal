@@ -214,6 +214,12 @@ export default function OddsPage() {
                       Different Price Situations&quot; box below for how the asset&apos;s own position
                       varied across these periods.
                     </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+                      For crypto assets, matching focuses on the liquidity and risk-appetite
+                      indicators (Fed policy, real rates, money supply, dollar, credit stress) and
+                      only considers months since the asset traded — both changes improved accuracy
+                      in walk-forward testing.
+                    </p>
                   </div>
                 </div>
               </div>

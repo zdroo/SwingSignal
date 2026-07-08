@@ -1,3 +1,5 @@
+using SwingSignal.Domain.Enums;
+
 namespace SwingSignal.Application.Regime;
 
 // Algorithm feature toggles, used by the backtester to compare configurations.
@@ -8,13 +10,23 @@ public record MatchingOptions(
     bool FamilyWeighting,
     bool KernelAllHistory,
     bool ShrinkToBaseRate,
-    double? StateBandwidth)   // null = no asset-state conditioning; smaller = stricter
+    double? StateBandwidth,          // null = no asset-state conditioning; smaller = stricter
+    MacroIndicatorType[]? DimensionFilter = null) // null = match on all dimensions
 {
     // Asset-state conditioning is OFF in production: pre-2015 tuning showed gains
     // for QQQ/GLD, but they did not survive 2015+ validation (GLD reversed to a
     // loss). The plumbing stays for re-testing via the backtest stateH parameter.
     public static readonly MatchingOptions Production = new(true, true, true, true, true, null);
     public static readonly MatchingOptions Baseline = new(false, false, false, false, false, null);
+
+    // Crypto assets match on the liquidity/risk-appetite subset only: US labor,
+    // housing and commodity cycles added noise for BTC/ETH (walk-forward
+    // validated — see CryptoDimensions).
+    public static readonly MatchingOptions CryptoProduction =
+        Production with { DimensionFilter = MacroSnapshotBuilder.CryptoDimensions };
+
+    public static MatchingOptions ForMarket(MarketType marketType) =>
+        marketType == MarketType.Crypto ? CryptoProduction : Production;
 
     // How many declustered analog periods feed the odds when KernelAllHistory is on.
     // High enough to cover ~3 decades at 6-month spacing.
@@ -27,5 +39,6 @@ public record MatchingOptions(
 
     public string Label => this == Production ? "current"
         : this == Baseline ? "baseline"
+        : this == CryptoProduction ? "crypto"
         : "custom";
 }

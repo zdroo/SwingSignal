@@ -78,7 +78,7 @@ public class RegimeController : ControllerBase
         if (topK is < 1 or > MatchingOptions.AnalogCount)
             return BadRequest($"topK must be between 1 and {MatchingOptions.AnalogCount}");
 
-        var matches = await _regime.FindSimilarPeriodsAsync(topK, ct);
+        var matches = await _regime.FindSimilarPeriodsAsync(topK, ct: ct);
         return Ok(matches);
     }
 

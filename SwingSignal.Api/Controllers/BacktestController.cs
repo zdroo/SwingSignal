@@ -29,6 +29,8 @@ public class BacktestController : ControllerBase
         [FromQuery] int? fromYear = null,
         [FromQuery] int? toYear = null,
         [FromQuery] double? stateH = null,
+        [FromQuery] string? profile = null,
+        [FromQuery] bool? floorHistory = null,
         CancellationToken ct = default)
     {
         if (days is < 7 or > 365)
@@ -36,6 +38,9 @@ public class BacktestController : ControllerBase
 
         if (topK is < 1 or > 20)
             return BadRequest("topK must be between 1 and 20");
+
+        if (profile is not null and not "crypto" and not "default")
+            return BadRequest("profile must be 'crypto' or 'default'");
 
         var normalized = SymbolNormalizer.Normalize(symbol);
 
@@ -45,7 +50,7 @@ public class BacktestController : ControllerBase
 
         try
         {
-            var result = await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, ct);
+            var result = await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, ct);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)

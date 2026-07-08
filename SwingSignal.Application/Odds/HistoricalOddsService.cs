@@ -33,9 +33,14 @@ public class HistoricalOddsService : IHistoricalOddsService
         var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
             ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
 
-        // Kernel weighting uses a wide set of declustered analogs, not just the top handful
-        var matches = await _regime.FindSimilarPeriodsAsync(MatchingOptions.AnalogCount, ct);
         var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
+
+        // Kernel weighting uses a wide set of declustered analogs, not just the
+        // top handful. Crypto uses the liquidity-focused profile, with analogs
+        // restricted to the asset's own tradable history.
+        var options = MatchingOptions.ForMarket(asset.MarketType);
+        var matches = await _regime.FindSimilarPeriodsAsync(
+            MatchingOptions.AnalogCount, options, MinAnalogDate(options, candles), ct);
 
         if (matches.Count == 0 || candles.Count == 0)
             return EmptyOdds(asset);
@@ -130,8 +135,11 @@ public class HistoricalOddsService : IHistoricalOddsService
         var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
             ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
 
-        var matches = await _regime.FindSimilarPeriodsAsync(MatchingOptions.AnalogCount, ct);
         var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
+
+        var periodOptions = MatchingOptions.ForMarket(asset.MarketType);
+        var matches = await _regime.FindSimilarPeriodsAsync(
+            MatchingOptions.AnalogCount, periodOptions, MinAnalogDate(periodOptions, candles), ct);
 
         if (matches.Count == 0 || candles.Count == 0)
         {
@@ -155,6 +163,14 @@ public class HistoricalOddsService : IHistoricalOddsService
             Disclaimer:  Disclaimer
         );
     }
+
+    // The candidate floor travels with the crypto profile: analogs before the
+    // asset's first candle can never be scored, so for short-history assets
+    // they only shrink the effective sample.
+    private static DateTime? MinAnalogDate(MatchingOptions options, List<Candle> candles) =>
+        options.DimensionFilter is not null && candles.Count > 0
+            ? candles[0].OpenTime
+            : null;
 
     private static List<(DateTime Date, double Weight)> ApplyKernelWeights(List<HistoricalMatchDto> matches)
     {

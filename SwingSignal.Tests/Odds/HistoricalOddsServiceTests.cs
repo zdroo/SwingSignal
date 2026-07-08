@@ -50,7 +50,9 @@ public class HistoricalOddsServiceTests
             .ReturnsAsync(candles);
 
         var regime = new Mock<IMacroRegimeService>(MockBehavior.Strict);
-        regime.Setup(r => r.FindSimilarPeriodsAsync(MatchingOptions.AnalogCount, It.IsAny<CancellationToken>()))
+        // Non-crypto asset: full-dimension production profile, no analog floor
+        regime.Setup(r => r.FindSimilarPeriodsAsync(
+                MatchingOptions.AnalogCount, MatchingOptions.Production, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(matches);
 
         var explainer = new Mock<IAssetExplainerService>();
@@ -100,6 +102,57 @@ public class HistoricalOddsServiceTests
         Assert.Equal(600m * 1.4478m, odds.PriceTargetLow);
         Assert.Equal(600m * 1.4478m, odds.PriceTargetMid);
         Assert.Equal(600m * 1.8911m, odds.PriceTargetHigh);
+    }
+
+    [Fact]
+    public async Task GetOddsAsync_CryptoAsset_UsesCryptoProfileAndHistoryFloor()
+    {
+        var btcId = Guid.NewGuid();
+        var btc = new Asset
+        {
+            Id = btcId,
+            Symbol = "BTCUSDT",
+            Name = "Bitcoin",
+            MarketType = MarketType.Crypto,
+            IsActive = true,
+        };
+        var candles = Enumerable.Range(0, 600).Select(i => new Candle
+        {
+            AssetId = btcId,
+            OpenTime = Start.AddDays(i),
+            Open = i + 1, High = i + 1, Low = i + 1, Close = i + 1,
+            Volume = 1,
+            Interval = CandleInterval.OneDay
+        }).ToList();
+        var matches = new List<HistoricalMatchDto> { Match(Start.AddDays(100), 50.0) };
+
+        var assets = new Mock<IAssetRepository>(MockBehavior.Strict);
+        assets.Setup(a => a.GetBySymbolAsync("BTCUSDT", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(btc);
+
+        var candleRepo = new Mock<ICandleRepository>(MockBehavior.Strict);
+        candleRepo.Setup(c => c.GetDailyHistoryAsync(btcId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(candles);
+
+        // Strict mock: the service must ask for the crypto profile with analogs
+        // floored at the first candle's date — any other arguments throw.
+        var regime = new Mock<IMacroRegimeService>(MockBehavior.Strict);
+        regime.Setup(r => r.FindSimilarPeriodsAsync(
+                MatchingOptions.AnalogCount, MatchingOptions.CryptoProduction, Start, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(matches);
+
+        var explainer = new Mock<IAssetExplainerService>();
+        explainer.Setup(e => e.GenerateAsync("BTCUSDT", MarketType.Crypto, matches, candles, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["crypto bullet"]);
+
+        var service = new HistoricalOddsService(assets.Object, candleRepo.Object, regime.Object, explainer.Object);
+
+        var result = await service.GetOddsAsync("BTCUSDT");
+
+        Assert.Equal("BTCUSDT", result.Symbol);
+        Assert.Equal(600m, result.CurrentPrice);
+        regime.Verify(r => r.FindSimilarPeriodsAsync(
+            MatchingOptions.AnalogCount, MatchingOptions.CryptoProduction, Start, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

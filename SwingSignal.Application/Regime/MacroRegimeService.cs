@@ -60,14 +60,19 @@ public class MacroRegimeService : IMacroRegimeService
         return new MacroRegimeDto(indicators, asOf);
     }
 
-    public async Task<List<HistoricalMatchDto>> FindSimilarPeriodsAsync(int topK = 10, CancellationToken ct = default)
+    public async Task<List<HistoricalMatchDto>> FindSimilarPeriodsAsync(
+        int topK = 10,
+        MatchingOptions? options = null,
+        DateTime? minAnalogDate = null,
+        CancellationToken ct = default)
     {
         var snapshots = await _snapshots.BuildAllAsync(ct);
 
         if (snapshots.Count < 2)
             return [];
 
-        var matches = MacroSnapshotBuilder.FindMatches(snapshots, snapshots.Count - 1, topK);
+        var matches = MacroSnapshotBuilder.FindMatches(
+            snapshots, snapshots.Count - 1, topK, options, minAnalogDate);
 
         return matches
             .Select(m => new HistoricalMatchDto(
