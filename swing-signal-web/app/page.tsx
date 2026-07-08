@@ -5,9 +5,11 @@ import { api } from "@/lib/api";
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
+import { LiveMacroCta } from "@/components/LiveMacroCta";
 import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
 import { PopularAssets } from "@/components/PopularAssets";
 import { ProWaitlist } from "@/components/ProWaitlist";
+import { signalSeverity, MARKET_MOVER_THRESHOLD } from "@/lib/regime-insight";
 import type { AssetOddsDto, MacroRegimeDto } from "@/types";
 import {
   ArrowRight,
@@ -87,6 +89,11 @@ export default async function LandingPage() {
     ? TEASER_INDICATORS.filter((k) => k in macroRegime.indicators)
     : [];
 
+  const readings = macroRegime ? Object.values(macroRegime.indicators) : [];
+  const moverCount = readings.filter(
+    (r) => signalSeverity(r.signal) >= MARKET_MOVER_THRESHOLD
+  ).length;
+
   return (
     <div className="mx-auto max-w-6xl px-4">
       {/* ============ HERO ============ */}
@@ -131,6 +138,9 @@ export default async function LandingPage() {
                 />
               </div>
             ))}
+          </div>
+          <div className="mx-auto mt-6 max-w-3xl">
+            <LiveMacroCta moverCount={moverCount} indicatorCount={readings.length} />
           </div>
         </section>
       )}
