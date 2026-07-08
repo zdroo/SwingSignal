@@ -70,6 +70,11 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {/* Pro waitlist — first thing on the page, narrow and centered */}
+      <div className="mx-auto max-w-2xl">
+        <ProWaitlist source="dashboard" />
+      </div>
+
       {/* Asset search — the primary action, front and center */}
       <section className="rounded-2xl border border-emerald-500/30 bg-white dark:bg-zinc-900 p-6">
         <h2 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-white">Analyze an Asset</h2>
@@ -78,11 +83,6 @@ export default async function DashboardPage() {
         </p>
         <AssetSearch />
       </section>
-
-      {/* Pro waitlist — narrow and centered under the primary action */}
-      <div className="mx-auto max-w-2xl">
-        <ProWaitlist source="dashboard" />
-      </div>
 
       {/* Popular assets — live sparklines + our 3M odds */}
       {popular.length > 0 && (
