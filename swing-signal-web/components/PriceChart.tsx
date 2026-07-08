@@ -168,11 +168,18 @@ export function PriceChart({
             <Info className="h-3.5 w-3.5 cursor-help text-zinc-400" />
             <span className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-80 -translate-x-1/2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-4 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100">
               <span className="block text-xs font-semibold text-zinc-900 dark:text-white">
-                What the dot colors mean
+                What the dots mean
               </span>
               <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-600 dark:text-zinc-300">
-                The <strong>200-day average</strong> is the average closing price over the previous
-                200 days — a widely-watched line for an asset&apos;s long-term trend.
+                Each dot marks a past month whose macro environment most closely resembled
+                today&apos;s. The odds on this page come from what {symbol} did after those
+                moments. The <strong>Today</strong> arrow marks the present — what all the
+                analogs are compared against.
+              </span>
+              <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-600 dark:text-zinc-300">
+                Colors show the asset&apos;s own state at the time. The <strong>200-day
+                average</strong> is the average closing price over the previous 200 days — a
+                widely-watched line for an asset&apos;s long-term trend.
               </span>
               <span className="mt-1.5 block text-xs font-normal leading-relaxed text-zinc-600 dark:text-zinc-300">
                 A <span className="font-medium text-sky-600 dark:text-sky-400">blue</span> dot means
@@ -221,22 +228,10 @@ export function PriceChart({
         )}
       </div>
 
-      {markerStats.above + markerStats.below + markerStats.unknown > 0 && (
+      {markerStats.offChart > 0 && (
         <p className="mt-2 text-xs text-zinc-500">
-          Each dot marks a month whose macro environment most closely resembled today&apos;s.
-          The odds on this page are computed from what {symbol} did after those moments. The{" "}
-          <span className="font-medium text-zinc-600 dark:text-zinc-400">Today</span> arrow marks
-          the present — the moment all the analogs are being compared against
-          {currentAboveMa200 === true && " (price currently above its 200-day average)"}
-          {currentAboveMa200 === false && " (price currently below its 200-day average)"}.
-          {markerStats.offChart > 0 && (
-            <>
-              {" "}
-              {markerStats.offChart} more analog{markerStats.offChart === 1 ? "" : "s"} predate{" "}
-              {symbol}&apos;s available price history and can&apos;t be shown here — for those,
-              the odds fall back to the analogs with price data.
-            </>
-          )}
+          {markerStats.offChart} more analog{markerStats.offChart === 1 ? "" : "s"} predate{" "}
+          {symbol}&apos;s available price history and can&apos;t be shown here.
         </p>
       )}
     </div>

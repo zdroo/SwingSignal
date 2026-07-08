@@ -169,7 +169,8 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
             </span>
             {odds.baseRate !== null && (
               <span
-                className={`rounded-md border px-2 py-0.5 text-xs font-medium ${
+                title={`${symbol} was higher after ${periodLabel(days)} in ${odds.baseRate.toFixed(0)}% of ALL historical periods — the base rate. The current macro regime ${Math.abs(odds.edge) <= 1 ? "does not meaningfully shift" : odds.edge > 0 ? "improves" : "worsens"} those odds.`}
+                className={`cursor-help rounded-md border px-2 py-0.5 text-xs font-medium ${
                   odds.edge > 1
                     ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
                     : odds.edge < -1
@@ -181,15 +182,7 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
               </span>
             )}
           </div>
-          {odds.baseRate !== null && (
-            <p className="mb-4 text-xs text-zinc-500">
-              For context: {symbol} was higher after {periodLabel(days)} in{" "}
-              {odds.baseRate.toFixed(0)}% of all historical periods. The current macro
-              regime {Math.abs(odds.edge) <= 1 ? "does not meaningfully shift" : odds.edge > 0 ? "improves" : "worsens"} those odds.
-            </p>
-          )}
-
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-3 gap-3">
             <Target
               label="Conservative (P25)"
               price={odds.priceTargetLow}

@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { track } from "@/lib/analytics";
 import type { BacktestComparisonDto, BacktestResultDto } from "@/types";
 import { FlaskConical, Loader2, AlertCircle, GitCompareArrows, Lock } from "lucide-react";
+import { InfoTip } from "@/components/InfoTip";
 
 const HORIZONS = [
   { label: "1M", days: 30 },
@@ -66,14 +67,17 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
 
   return (
     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-      <div className="mb-1 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2">
         <FlaskConical className="h-4 w-4 text-zinc-500" />
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Model Accuracy (Backtest)</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-white">
+          Model Accuracy (Backtest)
+          <InfoTip align="left">
+            Walk-forward test: for every month in history, we reproduce what the model would
+            have predicted at that time (using only data available then) and compare against
+            what actually happened.
+          </InfoTip>
+        </h2>
       </div>
-      <p className="mb-4 text-sm text-zinc-500">
-        Walk-forward test: for every month in history, we reproduce what the model would have
-        predicted at that time (using only data available then) and compare against what actually happened.
-      </p>
 
       <div className="mb-4 flex gap-2">
         {HORIZONS.map((h) => (

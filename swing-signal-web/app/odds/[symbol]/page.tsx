@@ -13,6 +13,7 @@ import { AnalogContext } from "@/components/AnalogContext";
 import { BacktestPanel } from "@/components/BacktestPanel";
 import { PriceChart } from "@/components/PriceChart";
 import { ProWaitlist } from "@/components/ProWaitlist";
+import { InfoTip } from "@/components/InfoTip";
 import { AlertCircle, ArrowLeft, Info, Loader2, Lock } from "lucide-react";
 import type { AssetOddsDto, OddsForPeriodDto } from "@/types";
 import { formatPrice } from "@/lib/format";
@@ -230,15 +231,23 @@ export default function OddsPage() {
           <PeriodPredictor symbol={odds.symbol} />
 
           <section className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Standard Outlooks</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                Where this price historically landed after periods like today. <span className="font-medium text-zinc-600 dark:text-zinc-400">Base Case</span> is
-                the middle outcome — half of history did better, half did worse. <span className="font-medium text-zinc-600 dark:text-zinc-400">Conservative</span> and{" "}
-                <span className="font-medium text-zinc-600 dark:text-zinc-400">Optimistic</span> frame the typical range, not the extremes — 1 in 4 cases
-                ended below Conservative, 1 in 4 above Optimistic. A wide range means history disagrees; read it as a range, not a target.
-              </p>
-            </div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-white">
+              Standard Outlooks
+              <InfoTip align="left">
+                <span className="block">
+                  Where this price historically landed after periods like today.{" "}
+                  <span className="font-medium text-zinc-900 dark:text-white">Base Case</span> is the
+                  middle outcome — half of history did better, half did worse.
+                </span>
+                <span className="mt-1.5 block">
+                  <span className="font-medium text-zinc-900 dark:text-white">Conservative</span> and{" "}
+                  <span className="font-medium text-zinc-900 dark:text-white">Optimistic</span> frame
+                  the typical range, not the extremes — 1 in 4 cases ended below Conservative, 1 in 4
+                  above Optimistic. A wide range means history disagrees; read it as a range, not a
+                  target.
+                </span>
+              </InfoTip>
+            </h2>
             <PeriodTargets label="1-Month Outlook" period={odds.oneMonth} currentPrice={odds.currentPrice} symbol={symbol} />
             <PeriodTargets label="3-Month Outlook" period={odds.threeMonths} currentPrice={odds.currentPrice} symbol={symbol} />
             <PeriodTargets label="6-Month Outlook" period={odds.sixMonths} currentPrice={odds.currentPrice} symbol={symbol} />

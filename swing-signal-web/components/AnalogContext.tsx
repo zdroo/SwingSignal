@@ -1,5 +1,6 @@
 import type { AnalogBreakdownDto } from "@/types";
 import { SplitSquareHorizontal } from "lucide-react";
+import { InfoTip } from "@/components/InfoTip";
 
 // The analogs split by the asset's own price state at the time — the honest
 // answer to "your dots appear before rises AND falls, what gives?". The split
@@ -35,13 +36,24 @@ export function AnalogContext({ breakdown, symbol }: { breakdown: AnalogBreakdow
       <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
         <SplitSquareHorizontal className="h-4 w-4 text-zinc-500" />
         Same Macro, Different Price Situations
+        <InfoTip align="left">
+          <span className="block">
+            The macro analogs happened at very different points in {symbol}&apos;s own price
+            cycle — that&apos;s why dots on the chart appear before both rises and falls.
+          </span>
+          <span className="mt-1.5 block">
+            &quot;Above the 200-day average&quot; is a slow long-term measure, not &quot;currently
+            rising&quot; — a price mid-fall can stay above its lagging average for weeks.
+          </span>
+          <span className="mt-1.5 block">
+            This split is context only: using it to change the headline odds failed our
+            out-of-sample validation, and the group samples are small. Read the medians as rough
+            tendencies, not targets.
+          </span>
+        </InfoTip>
       </h2>
       <p className="mb-4 text-xs text-zinc-500">
-        The macro analogs happened at very different points in {symbol}&apos;s own price cycle —
-        that&apos;s why dots on the chart appear before both rises and falls. Note: &quot;above the
-        200-day average&quot; is a slow long-term measure, not &quot;currently rising&quot; — a price
-        mid-fall can stay above its lagging average for weeks. Here is how each group played out
-        over the following 3 months:
+        How each group played out over the following 3 months:
       </p>
 
       <div className="space-y-2">
@@ -94,14 +106,6 @@ export function AnalogContext({ breakdown, symbol }: { breakdown: AnalogBreakdow
           </div>
         ))}
       </div>
-
-      <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-        Honesty note: we tested using this split to sharpen the headline odds, and it did not
-        survive out-of-sample validation — patterns like &quot;low price then rose&quot; described
-        the past better than they predicted the future. So we show you the split as context and
-        keep the headline odds based on all analogs. With {known} state-known analogs the group
-        samples are small; read the medians as rough tendencies, not targets.
-      </p>
     </div>
   );
 }

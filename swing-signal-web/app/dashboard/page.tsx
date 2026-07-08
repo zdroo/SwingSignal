@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/dashboard" },
 };
 import { AssetSearch } from "@/components/AssetSearch";
+import { InfoTip } from "@/components/InfoTip";
 import { PopularAssets } from "@/components/PopularAssets";
 import { ProWaitlist } from "@/components/ProWaitlist";
 import { signalSeverity, summarizeRegime, MARKET_MOVER_THRESHOLD } from "@/lib/regime-insight";
@@ -103,7 +104,6 @@ export default async function DashboardPage() {
             month: "long",
             day: "numeric",
           })}
-          {" "}— showing current macro conditions and their historical signal
         </p>
       </div>
 
@@ -111,8 +111,7 @@ export default async function DashboardPage() {
       <section className="rounded-2xl border border-emerald-500/30 bg-white dark:bg-zinc-900 p-6">
         <h2 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-white">Analyze an Asset</h2>
         <p className="mb-4 text-sm text-zinc-500">
-          Enter any symbol to see historical price odds and macro context for the current regime.
-          New symbols are fetched automatically.
+          Enter any symbol to see historical price odds and macro context.
         </p>
         <AssetSearch />
       </section>
@@ -155,13 +154,20 @@ export default async function DashboardPage() {
       {/* Historical matches */}
       {matches.length > 0 && (
         <section>
-          <h2 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-white">Most Similar Historical Periods</h2>
-          <p className="mb-3 text-sm text-zinc-500">
-            The closest historical analogs to today&apos;s macro conditions. Each chip represents
-            its whole surrounding period — nearby months are collapsed so one era can&apos;t occupy
-            several slots. Asset odds are computed from the top 40 such analogs, weighted by closeness.
-            Hover a chip for what the numbers mean.
-          </p>
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-white">
+            Most Similar Historical Periods
+            <InfoTip align="left">
+              <span className="block">
+                The closest historical analogs to today&apos;s macro conditions. Each chip
+                represents its whole surrounding period — nearby months are collapsed so one era
+                can&apos;t occupy several slots.
+              </span>
+              <span className="mt-1.5 block">
+                Asset odds are computed from the top 40 such analogs, weighted by closeness.
+                Hover a chip for what its numbers mean.
+              </span>
+            </InfoTip>
+          </h2>
           <div className="flex flex-wrap gap-2">
             {matches.map((m) => {
               // Guard against cached/older API responses that lack topPercent
@@ -214,8 +220,7 @@ export default async function DashboardPage() {
           ))}
         </div>
         <p className="mt-4 border-t border-zinc-200 dark:border-zinc-800 pt-3 text-xs text-zinc-500">
-          Generated automatically from the indicator signals above — the same rules every
-          time, no opinions. Historical context only, not financial advice.
+          Generated automatically from the indicator signals above. Not financial advice.
         </p>
       </section>
     </div>
