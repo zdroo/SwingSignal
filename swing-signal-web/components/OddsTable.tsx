@@ -1,4 +1,38 @@
 import type { AssetOddsDto, OddsForPeriodDto } from "@/types";
+import { Info } from "lucide-react";
+
+// Plain-language definitions shown as native tooltips (they survive the
+// table's horizontal-scroll container, where hover balloons would clip)
+const METRIC_INFO: Record<string, string> = {
+  "Positive Odds":
+    "The chance this asset ends higher over this window, based on what happened after similar past macro periods. Closer matches count more, and the number is pulled toward the Base Rate so a few analogs can't produce extreme claims.",
+  "Base Rate (all periods)":
+    "How often this asset rose over windows of this length across its ENTIRE history, ignoring macro conditions. This is the 'default' — what the odds would be on a completely average day.",
+  "Regime Edge":
+    "Positive Odds minus Base Rate: how much today's macro environment shifts the odds versus normal. Small numbers are honest — most of the time, macro doesn't change much.",
+  "Avg Return":
+    "The average return after each similar past period (closer matches weighted more). One huge outcome can drag it up or down — compare it with the median.",
+  "Median Return":
+    "The middle outcome: half of the similar past periods ended better than this, half worse. More robust than the average when one outcome was extreme.",
+  "Best Case":
+    "The single best outcome among the similar past periods. A lucky extreme that happened once — not a target.",
+  "Worst Case":
+    "The single worst outcome among the similar past periods. The realistic bad scenario — it actually happened once in comparable conditions.",
+};
+
+function MetricLabel({ label, emphasized = false }: { label: string; emphasized?: boolean }) {
+  return (
+    <span
+      title={METRIC_INFO[label]}
+      className={`inline-flex cursor-help items-center gap-1.5 ${
+        emphasized ? "font-medium text-zinc-700 dark:text-zinc-300" : "text-zinc-600 dark:text-zinc-400"
+      }`}
+    >
+      {label}
+      <Info className="h-3 w-3 shrink-0 text-zinc-400 dark:text-zinc-500" />
+    </span>
+  );
+}
 
 function oddsColor(pct: number) {
   if (pct >= 65) return "text-emerald-600 dark:text-emerald-400 font-semibold";
@@ -69,13 +103,13 @@ export function OddsTable({ odds }: Props) {
         </thead>
         <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
           <tr>
-            <td className="px-4 py-3 font-medium text-zinc-700 dark:text-zinc-300">Positive Odds</td>
+            <td className="px-4 py-3"><MetricLabel label="Positive Odds" emphasized /></td>
             {PERIODS.map((p) => (
               <PeriodCell key={p.key} d={odds[p.key] as OddsForPeriodDto} />
             ))}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Base Rate (all periods)</td>
+            <td className="px-4 py-3"><MetricLabel label="Base Rate (all periods)" /></td>
             {PERIODS.map((p) => {
               const d = odds[p.key] as OddsForPeriodDto;
               return (
@@ -86,7 +120,7 @@ export function OddsTable({ odds }: Props) {
             })}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Regime Edge</td>
+            <td className="px-4 py-3"><MetricLabel label="Regime Edge" /></td>
             {PERIODS.map((p) => {
               const d = odds[p.key] as OddsForPeriodDto;
               return (
@@ -102,25 +136,25 @@ export function OddsTable({ odds }: Props) {
             })}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Avg Return</td>
+            <td className="px-4 py-3"><MetricLabel label="Avg Return" /></td>
             {PERIODS.map((p) => (
               <ReturnCell key={p.key} d={odds[p.key] as OddsForPeriodDto} field="averageReturn" />
             ))}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Median Return</td>
+            <td className="px-4 py-3"><MetricLabel label="Median Return" /></td>
             {PERIODS.map((p) => (
               <ReturnCell key={p.key} d={odds[p.key] as OddsForPeriodDto} field="medianReturn" />
             ))}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Best Case</td>
+            <td className="px-4 py-3"><MetricLabel label="Best Case" /></td>
             {PERIODS.map((p) => (
               <ReturnCell key={p.key} d={odds[p.key] as OddsForPeriodDto} field="bestCase" />
             ))}
           </tr>
           <tr>
-            <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">Worst Case</td>
+            <td className="px-4 py-3"><MetricLabel label="Worst Case" /></td>
             {PERIODS.map((p) => (
               <ReturnCell key={p.key} d={odds[p.key] as OddsForPeriodDto} field="worstCase" />
             ))}
