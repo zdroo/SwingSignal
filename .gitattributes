@@ -1,0 +1,14 @@
+# Normalize all text files to LF in the repository; working-tree checkout
+# uses each developer's platform default. Ends the LF/CRLF warning noise.
+* text=auto
+
+# Lockfiles and generated files stay LF everywhere
+package-lock.json text eol=lf
+*.slnx text
+
+# Binary assets — never touch line endings
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
