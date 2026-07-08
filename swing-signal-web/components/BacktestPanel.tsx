@@ -72,9 +72,16 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
         <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-white">
           Model Accuracy (Backtest)
           <InfoTip align="left">
-            Walk-forward test: for every month in history, we reproduce what the model would
-            have predicted at that time (using only data available then) and compare against
-            what actually happened.
+            <span className="block">
+              Walk-forward test: for every month in history, we reproduce what the model would
+              have predicted at that time (using only data available then) and compare against
+              what actually happened.
+            </span>
+            <span className="mt-1.5 block">
+              Each prediction is a probability — the chance {symbol} would be{" "}
+              <span className="font-medium text-zinc-900 dark:text-white">higher after the
+              chosen horizon</span> (1, 3 or 6 months). Not a price target, just up-or-not odds.
+            </span>
           </InfoTip>
         </h2>
       </div>
@@ -126,7 +133,14 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
           {/* Headline stats */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 p-3">
-              <div className="text-xs text-zinc-500">Predictions Tested</div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                Predictions Tested
+                <InfoTip align="left">
+                  How many past months we tested. For each one, the model predicted — using only
+                  data available at that time — the chance {symbol} would be higher after the
+                  chosen horizon, and we then checked what the price actually did.
+                </InfoTip>
+              </div>
               <div className="mt-1 text-xl font-bold text-zinc-900 dark:text-white">{result.totalPredictions}</div>
               <div className="text-xs text-zinc-500 dark:text-zinc-600">
                 {new Date(result.firstPrediction).getFullYear()}–
@@ -134,18 +148,41 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
               </div>
             </div>
             <div className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 p-3">
-              <div className="text-xs text-zinc-500">Directional Accuracy</div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                Directional Accuracy
+                <InfoTip>
+                  How often the direction alone was right: a prediction counts as &quot;up&quot;
+                  when the model&apos;s odds were above 50%. Caution — for assets that rise most
+                  of the time, always saying &quot;up&quot; also scores high, so use the Brier
+                  score as the stricter measure.
+                </InfoTip>
+              </div>
               <div className="mt-1 text-xl font-bold text-zinc-900 dark:text-white">
                 {result.directionalAccuracy.toFixed(0)}%
               </div>
             </div>
             <div className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 p-3">
-              <div className="text-xs text-zinc-500">Brier Score</div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                Brier Score
+                <InfoTip>
+                  Grades the probabilities themselves, not just the direction: the average squared
+                  gap between the predicted odds (60% = 0.6) and what happened (1 if it rose,
+                  0 if not). Lower is better. Always guessing 50/50 scores 0.250; a perfect
+                  oracle scores 0. Below 0.25 means the odds carried real information.
+                </InfoTip>
+              </div>
               <div className="mt-1 text-xl font-bold text-zinc-900 dark:text-white">{result.brierScore.toFixed(3)}</div>
               <div className="text-xs text-zinc-500 dark:text-zinc-600">0.25 = coin flip</div>
             </div>
             <div className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 p-3">
-              <div className="text-xs text-zinc-500">Predicted vs Actual</div>
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                Predicted vs Actual
+                <InfoTip align="right">
+                  The average odds the model predicted across all tests vs how often {symbol}{" "}
+                  actually rose. Close numbers mean the model is honest overall — it doesn&apos;t
+                  systematically over-promise or under-promise.
+                </InfoTip>
+              </div>
               <div className="mt-1 text-xl font-bold text-zinc-900 dark:text-white">
                 {result.avgPredictedOdds.toFixed(0)}% / {result.actualPositiveRate.toFixed(0)}%
               </div>
@@ -157,16 +194,41 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
             <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
               <table className="w-full text-sm">
                 <thead>
+                  {/* Native titles here — hover balloons would clip inside the scroll container */}
                   <tr className="border-b border-zinc-200 dark:border-zinc-800 text-xs uppercase tracking-wider text-zinc-500">
-                    <th className="px-4 py-2 text-left">When Model Said</th>
-                    <th className="px-4 py-2 text-center">Cases</th>
-                    <th className="px-4 py-2 text-center">Avg Predicted</th>
-                    <th className="px-4 py-2 text-center">Actually Went Up</th>
+                    <th
+                      className="cursor-help px-4 py-2 text-left"
+                      title="All test predictions grouped by the odds the model gave. Each row asks: when the model said e.g. 60-70%, did the asset actually rise about that often? Rows where the last two columns are close mean the odds can be taken at face value."
+                    >
+                      When Model Said
+                    </th>
+                    <th
+                      className="cursor-help px-4 py-2 text-center"
+                      title="How many test predictions fell into this odds range. Small counts (under ~20) can be off just by chance."
+                    >
+                      Cases
+                    </th>
+                    <th
+                      className="cursor-help px-4 py-2 text-center"
+                      title="The average odds the model gave within this range."
+                    >
+                      Avg Predicted
+                    </th>
+                    <th
+                      className="cursor-help px-4 py-2 text-center"
+                      title="How often the asset actually ended higher in those cases. Green = within 10 points of predicted, amber = within 20, red = further off."
+                    >
+                      Actually Went Up
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                   {result.calibration.map((b) => (
-                    <tr key={b.predictedRange}>
+                    <tr
+                      key={b.predictedRange}
+                      className="cursor-help"
+                      title={`The model gave odds in the ${b.predictedRange} range ${b.predictions} time${b.predictions === 1 ? "" : "s"} (average ${b.avgPredictedOdds.toFixed(0)}%). ${symbol} actually rose in ${b.actualPositiveRate.toFixed(0)}% of those cases — a gap of ${Math.abs(b.avgPredictedOdds - b.actualPositiveRate).toFixed(0)} points. The closer the two numbers, the more these odds can be trusted at face value.`}
+                    >
                       <td className="px-4 py-2 font-medium text-zinc-700 dark:text-zinc-300">{b.predictedRange}</td>
                       <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{b.predictions}</td>
                       <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">
@@ -207,14 +269,25 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
             <div className="space-y-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-950/50 p-4">
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div />
-                <div className="text-center text-xs uppercase tracking-wider text-zinc-500">
+                <div
+                  className="cursor-help text-center text-xs uppercase tracking-wider text-zinc-500"
+                  title="A naive predictor that always guesses the asset's long-run base rate and ignores macro entirely. Our model has to beat this to be adding any value."
+                >
                   Baseline
                 </div>
-                <div className="text-center text-xs uppercase tracking-wider text-emerald-500">
+                <div
+                  className="cursor-help text-center text-xs uppercase tracking-wider text-emerald-500"
+                  title="The live model: odds from the most similar historical macro periods."
+                >
                   Current
                 </div>
 
-                <div className="text-zinc-600 dark:text-zinc-400">Brier Score</div>
+                <div
+                  className="cursor-help text-zinc-600 dark:text-zinc-400"
+                  title="Grades the probabilities: average squared gap between predicted odds and what happened. Lower is better; 0.250 = always guessing 50/50."
+                >
+                  Brier Score
+                </div>
                 <div className="text-center text-zinc-700 dark:text-zinc-300 tabular-nums">
                   {comparison.baseline.brierScore.toFixed(3)}
                 </div>
@@ -228,7 +301,12 @@ export function BacktestPanel({ symbol }: { symbol: string }) {
                   {comparison.current.brierScore.toFixed(3)}
                 </div>
 
-                <div className="text-zinc-600 dark:text-zinc-400">Directional Accuracy</div>
+                <div
+                  className="cursor-help text-zinc-600 dark:text-zinc-400"
+                  title="How often the up-or-down call was right (odds above 50% count as 'up'). For assets that usually rise, this flatters both models — Brier is the stricter test."
+                >
+                  Directional Accuracy
+                </div>
                 <div className="text-center text-zinc-700 dark:text-zinc-300 tabular-nums">
                   {comparison.baseline.directionalAccuracy.toFixed(0)}%
                 </div>
