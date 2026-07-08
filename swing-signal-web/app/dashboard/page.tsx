@@ -117,6 +117,11 @@ export default async function DashboardPage() {
         <AssetSearch />
       </section>
 
+      {/* Pro waitlist — narrow and centered under the primary action */}
+      <div className="mx-auto max-w-2xl">
+        <ProWaitlist source="dashboard" />
+      </div>
+
       {/* Popular assets — live sparklines + our 3M odds */}
       {popular.length > 0 && (
         <section>
@@ -213,8 +218,6 @@ export default async function DashboardPage() {
           time, no opinions. Historical context only, not financial advice.
         </p>
       </section>
-
-      <ProWaitlist source="dashboard" />
     </div>
   );
 }
