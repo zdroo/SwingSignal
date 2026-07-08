@@ -19,7 +19,15 @@ import { LineChart, Loader2, Info } from "lucide-react";
 // look like today, and the odds come from what happened after each one."
 // Dots are colored by the asset's own price state at the time (uptrend vs
 // downtrend), which explains why analogs precede both rises and falls.
-export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: AnalogPointDto[] }) {
+export function PriceChart({
+  symbol,
+  analogs,
+  currentAboveMa200,
+}: {
+  symbol: string;
+  analogs?: AnalogPointDto[];
+  currentAboveMa200?: boolean | null;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -94,6 +102,18 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
           shape: "circle" as const,
           size: 1,
         }));
+
+        // "You are here": mark today, colored by the asset's current 200-day
+        // state so it can be compared directly against the analog dots.
+        markers.push({
+          time: last as Time,
+          position: "aboveBar" as const,
+          color: currentAboveMa200 === true ? "#0ea5e9"
+            : currentAboveMa200 === false ? "#f59e0b"
+            : "#10b981",
+          shape: "arrowDown" as const,
+          text: "Today",
+        });
 
         series.setMarkers(markers);
         setMarkerStats({
@@ -204,7 +224,11 @@ export function PriceChart({ symbol, analogs }: { symbol: string; analogs?: Anal
       {markerStats.above + markerStats.below + markerStats.unknown > 0 && (
         <p className="mt-2 text-xs text-zinc-500">
           Each dot marks a month whose macro environment most closely resembled today&apos;s.
-          The odds on this page are computed from what {symbol} did after those moments.
+          The odds on this page are computed from what {symbol} did after those moments. The{" "}
+          <span className="font-medium text-zinc-600 dark:text-zinc-400">Today</span> arrow marks
+          the present — the moment all the analogs are being compared against
+          {currentAboveMa200 === true && " (price currently above its 200-day average)"}
+          {currentAboveMa200 === false && " (price currently below its 200-day average)"}.
           {markerStats.offChart > 0 && (
             <>
               {" "}

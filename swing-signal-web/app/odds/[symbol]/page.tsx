@@ -219,7 +219,11 @@ export default function OddsPage() {
             )}
           </div>
 
-          <PriceChart symbol={odds.symbol} analogs={odds.breakdown?.points} />
+          <PriceChart
+            symbol={odds.symbol}
+            analogs={odds.breakdown?.points}
+            currentAboveMa200={odds.breakdown?.currentAboveMa200 ?? null}
+          />
 
           {odds.breakdown && <AnalogContext breakdown={odds.breakdown} symbol={odds.symbol} />}
 
