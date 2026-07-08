@@ -7,6 +7,7 @@ export const metadata: Metadata = {
 };
 import { MacroIndicatorCard } from "@/components/MacroIndicatorCard";
 import { PopularAssets } from "@/components/PopularAssets";
+import { ProWaitlist } from "@/components/ProWaitlist";
 import type { AssetOddsDto, MacroRegimeDto } from "@/types";
 import {
   ArrowRight,
@@ -108,6 +109,11 @@ export default async function LandingPage() {
           </Link>
         </div>
         <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-600">Free. No account needed.</p>
+
+        {/* Pro waitlist — capture interest before visitors dive in */}
+        <div className="mx-auto mt-10 max-w-2xl text-left">
+          <ProWaitlist source="landing" />
+        </div>
       </section>
 
       {/* ============ LIVE INDICATOR STRIP ============ */}
