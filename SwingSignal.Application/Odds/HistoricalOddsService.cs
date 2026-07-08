@@ -46,7 +46,8 @@ public class HistoricalOddsService : IHistoricalOddsService
             return EmptyOdds(asset);
 
         var currentPrice = candles[^1].Close;
-        var weighted = ConditionOnAssetState(candles, ApplyKernelWeights(matches));
+        var weighted = ConditionOnCryptoCycle(options, candles,
+            ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
 
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
@@ -150,7 +151,8 @@ public class HistoricalOddsService : IHistoricalOddsService
         }
 
         var currentPrice = candles[^1].Close;
-        var weighted = ConditionOnAssetState(candles, ApplyKernelWeights(matches));
+        var weighted = ConditionOnCryptoCycle(periodOptions, candles,
+            ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
         var returns = ComputeReturns(candles, weighted, days);
 
         return new AssetPeriodOddsDto(
@@ -207,6 +209,26 @@ public class HistoricalOddsService : IHistoricalOddsService
             if (analogState is null) return a;
 
             var factor = AssetStateCalculator.StateFactor(current, analogState, stds, bandwidth.Value);
+            return (a.Date, a.Weight * factor);
+        }).ToList();
+    }
+
+    // Down-weights analogs from a different point in the crypto cycle (halving
+    // phase + Mayer multiple). Only active when the profile carries a bandwidth.
+    private static List<(DateTime Date, double Weight)> ConditionOnCryptoCycle(
+        MatchingOptions options, List<Candle> candles, List<(DateTime Date, double Weight)> analogs)
+    {
+        var bandwidth = options.CryptoCycleBandwidth;
+        if (bandwidth is null || candles.Count == 0) return analogs;
+
+        var now = candles[^1].OpenTime;
+        var mayerNow = CryptoCycle.MayerMultipleAt(candles, candles.Count - 1);
+
+        return analogs.Select(a =>
+        {
+            var idx = CandleMath.FindNearestIndex(candles, a.Date, 7);
+            var mayerAnalog = idx >= 0 ? CryptoCycle.MayerMultipleAt(candles, idx) : null;
+            var factor = CryptoCycle.CycleFactor(now, mayerNow, a.Date, mayerAnalog, bandwidth.Value);
             return (a.Date, a.Weight * factor);
         }).ToList();
     }

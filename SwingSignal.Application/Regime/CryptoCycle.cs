@@ -52,16 +52,58 @@ public static class CryptoCycle
     /// Thresholds (2.4 / 0.8) come from Bitcoin's own history.
     public static decimal? MayerMultiple(List<Candle> candles)
     {
-        if (candles.Count < 200) return null;
+        var raw = MayerMultipleAt(candles, candles.Count - 1);
+        return raw is null ? null : Math.Round(raw.Value, 2);
+    }
+
+    /// Unrounded Mayer Multiple at a historical candle index (null if fewer
+    /// than 200 candles precede it).
+    public static decimal? MayerMultipleAt(List<Candle> candles, int index)
+    {
+        if (index < 199 || index >= candles.Count) return null;
 
         decimal sum = 0;
-        for (var i = candles.Count - 200; i < candles.Count; i++)
+        for (var i = index - 199; i <= index; i++)
             sum += candles[i].Close;
 
         var sma = sum / 200;
         if (sma == 0) return null;
 
-        return Math.Round(candles[^1].Close / sma, 2);
+        return candles[index].Close / sma;
+    }
+
+    // Approximate halving cycle length. Actual gaps were 44-48 months; the
+    // phase comparison is circular so the approximation only blurs, never wraps wrongly.
+    public const double CycleLengthMonths = 48.0;
+
+    /// Gaussian similarity factor in (0, 1] between two crypto-cycle positions.
+    /// Two dimensions, each roughly on a 0..1 scale:
+    ///  - halving phase, compared circularly (month 47 neighbors month 1);
+    ///  - |ln| gap between Mayer Multiples (how stretched price was vs its 200-day avg).
+    /// A missing dimension contributes zero — no information, no penalty.
+    /// Smaller bandwidth = stricter down-weighting of different cycle positions.
+    public static double CycleFactor(
+        DateTime now, decimal? mayerNow,
+        DateTime analog, decimal? mayerAnalog,
+        double bandwidth)
+    {
+        var monthsNow = MonthsSinceHalving(now);
+        var monthsAnalog = MonthsSinceHalving(analog);
+
+        var dPhase = 0.0;
+        if (monthsNow is not null && monthsAnalog is not null)
+        {
+            var fracNow = monthsNow.Value % CycleLengthMonths / CycleLengthMonths;
+            var fracAnalog = monthsAnalog.Value % CycleLengthMonths / CycleLengthMonths;
+            var diff = Math.Abs(fracNow - fracAnalog);
+            dPhase = Math.Min(diff, 1.0 - diff) * 2.0; // 0 = same phase, 1 = opposite
+        }
+
+        var dMayer = 0.0;
+        if (mayerNow is > 0 && mayerAnalog is > 0)
+            dMayer = Math.Abs(Math.Log((double)mayerNow.Value) - Math.Log((double)mayerAnalog.Value));
+
+        return Math.Exp(-(dPhase * dPhase + dMayer * dMayer) / (bandwidth * bandwidth));
     }
 
     public static string? MayerBullet(List<Candle> candles)

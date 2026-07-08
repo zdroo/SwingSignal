@@ -31,6 +31,7 @@ public class BacktestController : ControllerBase
         [FromQuery] double? stateH = null,
         [FromQuery] string? profile = null,
         [FromQuery] bool? floorHistory = null,
+        [FromQuery] double? cycleH = null,
         CancellationToken ct = default)
     {
         if (days is < 7 or > 365)
@@ -50,7 +51,7 @@ public class BacktestController : ControllerBase
 
         try
         {
-            var result = await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, ct);
+            var result = await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, cycleH, ct);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)

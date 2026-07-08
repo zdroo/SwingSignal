@@ -11,7 +11,8 @@ public record MatchingOptions(
     bool KernelAllHistory,
     bool ShrinkToBaseRate,
     double? StateBandwidth,          // null = no asset-state conditioning; smaller = stricter
-    MacroIndicatorType[]? DimensionFilter = null) // null = match on all dimensions
+    MacroIndicatorType[]? DimensionFilter = null,  // null = match on all dimensions
+    double? CryptoCycleBandwidth = null) // null = no halving-phase/Mayer conditioning
 {
     // Asset-state conditioning is OFF in production: pre-2015 tuning showed gains
     // for QQQ/GLD, but they did not survive 2015+ validation (GLD reversed to a
@@ -22,6 +23,10 @@ public record MatchingOptions(
     // Crypto assets match on the liquidity/risk-appetite subset only: US labor,
     // housing and commodity cycles added noise for BTC/ETH (walk-forward
     // validated — see CryptoDimensions).
+    // Crypto-cycle conditioning (halving phase + Mayer multiple) stays OFF:
+    // tested July 2026 at h ∈ {0.5..1.5}, both pre-2022 and 2022+ — Brier
+    // moved ±0.004 with no consistent direction. The plumbing stays for
+    // re-testing via the backtest cycleH parameter.
     public static readonly MatchingOptions CryptoProduction =
         Production with { DimensionFilter = MacroSnapshotBuilder.CryptoDimensions };
 

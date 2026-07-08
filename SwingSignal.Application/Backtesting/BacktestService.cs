@@ -37,7 +37,7 @@ public class BacktestService : IBacktestService
     public async Task<BacktestResultDto> RunAsync(
         string symbol, int days, int topK = 10,
         int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
-        string? profile = null, bool? floorHistory = null,
+        string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
         CancellationToken ct = default)
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
@@ -56,7 +56,10 @@ public class BacktestService : IBacktestService
         {
             StateBandwidth = stateBandwidth is null
                 ? baseOptions.StateBandwidth
-                : stateBandwidth == 0 ? null : stateBandwidth
+                : stateBandwidth == 0 ? null : stateBandwidth,
+            CryptoCycleBandwidth = cycleBandwidth is null
+                ? baseOptions.CryptoCycleBandwidth
+                : cycleBandwidth == 0 ? null : cycleBandwidth
         };
 
         var minAnalogDate = (floorHistory ?? useCrypto) && candles.Count > 0
@@ -213,6 +216,14 @@ public class BacktestService : IBacktestService
                     if (analogState is not null)
                         weight *= AssetStateCalculator.StateFactor(
                             currentState!, analogState, stateStds!, options.StateBandwidth!.Value);
+                }
+
+                if (options.CryptoCycleBandwidth is not null)
+                {
+                    weight *= CryptoCycle.CycleFactor(
+                        evalMonth, CryptoCycle.MayerMultipleAt(candles, entryIdx),
+                        match.Date, CryptoCycle.MayerMultipleAt(candles, analogIdx),
+                        options.CryptoCycleBandwidth.Value);
                 }
 
                 usable++;
