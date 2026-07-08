@@ -17,6 +17,7 @@ public class AuthServiceTests
     private readonly Mock<ITokenService> _tokens = new();
     private readonly Mock<IGoogleTokenValidator> _google = new();
     private readonly Mock<IEmailService> _email = new();
+    private readonly Mock<IAnalyticsRepository> _analytics = new();
 
     private AuthService BuildService()
     {
@@ -30,7 +31,44 @@ public class AuthServiceTests
         _tokens.Setup(t => t.CreateAccessToken(It.IsAny<User>()))
             .Returns(new AccessToken("jwt-token", new DateTime(2026, 8, 1)));
 
-        return new AuthService(_users.Object, _hasher.Object, _tokens.Object, _google.Object, _email.Object, config);
+        return new AuthService(
+            _users.Object, _hasher.Object, _tokens.Object, _google.Object, _email.Object,
+            _analytics.Object, config);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_DetachesSearchHistoryBeforeDeletingTheUser()
+    {
+        var userId = Guid.NewGuid();
+        var user = new User { Id = userId, Email = "gone@example.com" };
+        _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // GDPR ordering: history must be unlinked before the account row disappears
+        var calls = new List<string>();
+        _analytics.Setup(a => a.DetachUserAsync(userId, It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("detach"))
+            .Returns(Task.CompletedTask);
+        _users.Setup(u => u.DeleteAsync(user, It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("delete"))
+            .Returns(Task.CompletedTask);
+
+        await BuildService().DeleteAccountAsync(userId);
+
+        Assert.Equal(["detach", "delete"], calls);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_UnknownUser_ThrowsAndTouchesNothing()
+    {
+        var userId = Guid.NewGuid();
+        _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User?)null);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => BuildService().DeleteAccountAsync(userId));
+
+        _analytics.Verify(a => a.DetachUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _users.Verify(u => u.DeleteAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Register ─────────────────────────────────────────────────────────

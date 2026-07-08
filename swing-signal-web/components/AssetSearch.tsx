@@ -124,7 +124,6 @@ export function AssetSearch() {
             <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-zinc-500" />
           )}
 
-          {/* Autocomplete dropdown */}
           {open && results.length > 0 && (
             <ul className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl">
               {results.map((r, i) => (

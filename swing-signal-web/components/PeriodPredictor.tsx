@@ -99,7 +99,6 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
         {loading && <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />}
       </div>
 
-      {/* Period selector */}
       <div className="mb-3 flex flex-wrap gap-2">
         {PRESETS.map((p) => (
           <button
@@ -116,7 +115,6 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
         ))}
       </div>
 
-      {/* Fine-grained slider */}
       <div className="mb-5 flex items-center gap-3">
         <input
           type="range"
@@ -131,7 +129,6 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
         </span>
       </div>
 
-      {/* Result */}
       {gated ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 p-4">
           <Lock className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />

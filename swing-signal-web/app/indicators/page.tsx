@@ -52,7 +52,6 @@ function IndicatorEntry({ indicatorKey }: { indicatorKey: string }) {
 export default function IndicatorsPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      {/* Header */}
       <div className="mb-10 text-center">
         <BookOpen className="mx-auto mb-3 h-8 w-8 text-emerald-600 dark:text-emerald-400" />
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-white">
@@ -210,7 +209,6 @@ export default function IndicatorsPage() {
         </div>
       </section>
 
-      {/* CTA */}
       <div className="pb-8 text-center">
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
           Now see what these indicators say about today.

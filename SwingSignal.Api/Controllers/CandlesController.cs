@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using SwingSignal.Application.Abstractions.Persistence;
-using SwingSignal.Contracts.Candles;
+using SwingSignal.Application.Markets;
 using SwingSignal.Domain.Enums;
 
 namespace SwingSignal.Api.Controllers;
@@ -9,9 +8,9 @@ namespace SwingSignal.Api.Controllers;
 [Route("api/[controller]")]
 public class CandlesController : ControllerBase
 {
-    private readonly ICandleRepository _candles;
+    private readonly ICandleQueryService _candles;
 
-    public CandlesController(ICandleRepository candles) => _candles = candles;
+    public CandlesController(ICandleQueryService candles) => _candles = candles;
 
     [HttpGet("{symbol}")]
     public async Task<IActionResult> Get(
@@ -23,12 +22,11 @@ public class CandlesController : ControllerBase
         if (!Enum.TryParse<CandleInterval>(interval, true, out var parsedInterval))
             return BadRequest($"Invalid interval. Valid values: {string.Join(", ", Enum.GetNames<CandleInterval>())}");
 
-        var candles = await _candles.GetBySymbolAsync(symbol, parsedInterval, limit, ct);
+        var candles = await _candles.GetAsync(symbol, parsedInterval, limit, ct);
 
         if (candles.Count == 0)
             return NotFound($"No candles found for {symbol.ToUpper()} on {interval} interval");
 
-        var dtos = candles.Select(c => new CandleDto(c.OpenTime, c.Open, c.High, c.Low, c.Close, c.Volume));
-        return Ok(dtos);
+        return Ok(candles);
     }
 }

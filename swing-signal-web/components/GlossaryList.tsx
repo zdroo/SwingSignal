@@ -20,7 +20,6 @@ export function GlossaryList() {
 
   return (
     <div>
-      {/* Search */}
       <div className="relative mx-auto mb-10 max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
         <input

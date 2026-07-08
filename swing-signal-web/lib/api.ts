@@ -63,15 +63,16 @@ export const api = {
   getHistoricalMatches: (topK = 10): Promise<HistoricalMatchDto[]> =>
     get(`/api/regime/matches?topK=${topK}`),
 
-  getAssetOdds: (symbol: string, topK = 10, meta?: { q?: string; src?: string }): Promise<AssetOddsDto> => {
-    const params = new URLSearchParams({ topK: String(topK) });
+  getAssetOdds: (symbol: string, meta?: { q?: string; src?: string }): Promise<AssetOddsDto> => {
+    const params = new URLSearchParams();
     if (meta?.q) params.set("q", meta.q);
     if (meta?.src) params.set("src", meta.src);
-    return get(`/api/regime/odds/${encodeURIComponent(symbol)}?${params.toString()}`);
+    const query = params.toString();
+    return get(`/api/regime/odds/${encodeURIComponent(symbol)}${query ? `?${query}` : ""}`);
   },
 
-  getOddsForPeriod: (symbol: string, days: number, topK = 10): Promise<AssetPeriodOddsDto> =>
-    get(`/api/regime/odds/${encodeURIComponent(symbol)}/period?days=${days}&topK=${topK}`),
+  getOddsForPeriod: (symbol: string, days: number): Promise<AssetPeriodOddsDto> =>
+    get(`/api/regime/odds/${encodeURIComponent(symbol)}/period?days=${days}`),
 
   getAssets: (): Promise<AssetDto[]> =>
     get("/api/assets"),

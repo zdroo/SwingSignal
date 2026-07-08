@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Odds;
 using SwingSignal.Contracts.Assets;
@@ -13,21 +14,39 @@ public class PopularAssetsService : IPopularAssetsService
     private const int WindowDays = 90;   // sparkline lookback (trading days ~63, we take candles)
     private const int SparkPoints = 30;  // downsampled points per sparkline
 
+    // Computing odds for six assets isn't free, and every landing/dashboard
+    // visit asks for this — cache it here so every caller benefits.
+    private const string CacheKey = "popular-assets";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+
     private readonly IAssetRepository _assets;
     private readonly ICandleRepository _candles;
     private readonly IHistoricalOddsService _odds;
+    private readonly IMemoryCache _cache;
 
     public PopularAssetsService(
         IAssetRepository assets,
         ICandleRepository candles,
-        IHistoricalOddsService odds)
+        IHistoricalOddsService odds,
+        IMemoryCache cache)
     {
         _assets = assets;
         _candles = candles;
         _odds = odds;
+        _cache = cache;
     }
 
     public async Task<List<PopularAssetDto>> GetPopularAsync(CancellationToken ct = default)
+    {
+        if (_cache.TryGetValue(CacheKey, out List<PopularAssetDto>? cached) && cached is not null)
+            return cached;
+
+        var results = await BuildAsync(ct);
+        _cache.Set(CacheKey, results, CacheTtl);
+        return results;
+    }
+
+    private async Task<List<PopularAssetDto>> BuildAsync(CancellationToken ct)
     {
         var results = new List<PopularAssetDto>();
 

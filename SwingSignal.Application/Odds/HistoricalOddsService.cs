@@ -28,26 +28,14 @@ public class HistoricalOddsService : IHistoricalOddsService
         _explainer = explainer;
     }
 
-    public async Task<AssetOddsDto> GetOddsAsync(string symbol, int topK = 10, CancellationToken ct = default)
+    public async Task<AssetOddsDto> GetOddsAsync(string symbol, CancellationToken ct = default)
     {
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
-            ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
+        var ctx = await LoadContextAsync(symbol, ct);
+        if (!ctx.HasData)
+            return EmptyOdds(ctx.Asset);
 
-        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
-
-        // Kernel weighting uses a wide set of declustered analogs, not just the
-        // top handful. Crypto uses the liquidity-focused profile, with analogs
-        // restricted to the asset's own tradable history.
-        var options = MatchingOptions.ForMarket(asset.MarketType);
-        var matches = await _regime.FindSimilarPeriodsAsync(
-            MatchingOptions.AnalogCount, options, MinAnalogDate(options, candles), ct);
-
-        if (matches.Count == 0 || candles.Count == 0)
-            return EmptyOdds(asset);
-
-        var currentPrice = candles[^1].Close;
-        var weighted = ConditionOnCryptoCycle(options, candles,
-            ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
+        var (asset, candles, matches, weighted) = ctx;
+        var currentPrice = ctx.CurrentPrice;
 
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
@@ -128,31 +116,22 @@ public class HistoricalOddsService : IHistoricalOddsService
         return sorted[sorted.Count / 2];
     }
 
-    public async Task<AssetPeriodOddsDto> GetOddsForDaysAsync(string symbol, int days, int topK = 10, CancellationToken ct = default)
+    public async Task<AssetPeriodOddsDto> GetOddsForDaysAsync(string symbol, int days, CancellationToken ct = default)
     {
         if (days is < 7 or > 365)
             throw new ArgumentOutOfRangeException(nameof(days), "days must be between 7 and 365");
 
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
-            ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
-
-        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
-
-        var periodOptions = MatchingOptions.ForMarket(asset.MarketType);
-        var matches = await _regime.FindSimilarPeriodsAsync(
-            MatchingOptions.AnalogCount, periodOptions, MinAnalogDate(periodOptions, candles), ct);
-
-        if (matches.Count == 0 || candles.Count == 0)
+        var ctx = await LoadContextAsync(symbol, ct);
+        if (!ctx.HasData)
         {
             return new AssetPeriodOddsDto(
-                asset.Symbol, asset.Name, days, 0, null,
+                ctx.Asset.Symbol, ctx.Asset.Name, days, 0, null,
                 EmptyPeriod(),
                 "Insufficient historical data to compute odds.");
         }
 
-        var currentPrice = candles[^1].Close;
-        var weighted = ConditionOnCryptoCycle(periodOptions, candles,
-            ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
+        var (asset, candles, matches, weighted) = ctx;
+        var currentPrice = ctx.CurrentPrice;
         var returns = ComputeReturns(candles, weighted, days);
 
         return new AssetPeriodOddsDto(
@@ -164,6 +143,38 @@ public class HistoricalOddsService : IHistoricalOddsService
             Odds:        ComputeOdds(returns, currentPrice, CandleMath.ComputeBaseRate(candles, days)),
             Disclaimer:  Disclaimer
         );
+    }
+
+    // Everything both odds endpoints need: the asset, its candles, the analogs
+    // matched under the asset's profile (crypto = liquidity dimensions +
+    // history-floored analogs), and the fully weighted analog list.
+    private sealed record OddsContext(
+        Asset Asset,
+        List<Candle> Candles,
+        List<HistoricalMatchDto> Matches,
+        List<(DateTime Date, double Weight)> WeightedAnalogs)
+    {
+        public bool HasData => Matches.Count > 0 && Candles.Count > 0;
+        public decimal CurrentPrice => Candles[^1].Close;
+    }
+
+    private async Task<OddsContext> LoadContextAsync(string symbol, CancellationToken ct)
+    {
+        var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
+            ?? throw new KeyNotFoundException($"Asset {symbol.ToUpper()} not found");
+
+        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
+
+        var options = MatchingOptions.ForMarket(asset.MarketType);
+        var matches = await _regime.FindSimilarPeriodsAsync(
+            MatchingOptions.AnalogCount, options, MinAnalogDate(options, candles), ct);
+
+        var weighted = matches.Count == 0 || candles.Count == 0
+            ? []
+            : ConditionOnCryptoCycle(options, candles,
+                ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
+
+        return new OddsContext(asset, candles, matches, weighted);
     }
 
     // The candidate floor travels with the crypto profile: analogs before the

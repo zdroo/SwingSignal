@@ -128,7 +128,7 @@ export default function OddsPage() {
     setError(null);
 
     api
-      .getAssetOdds(symbol, 10, {
+      .getAssetOdds(symbol, {
         q: searchParams.get("q") ?? undefined,
         src: searchParams.get("src") ?? undefined,
       })

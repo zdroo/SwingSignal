@@ -62,11 +62,8 @@ public class BacktestService : IBacktestService
                 : cycleBandwidth == 0 ? null : cycleBandwidth
         };
 
-        var minAnalogDate = (floorHistory ?? useCrypto) && candles.Count > 0
-            ? candles[0].OpenTime
-            : (DateTime?)null;
-
-        return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear, minAnalogDate);
+        return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear,
+            AnalogFloor(floorHistory ?? useCrypto, candles));
     }
 
     public async Task<BacktestComparisonDto> CompareAsync(
@@ -79,15 +76,18 @@ public class BacktestService : IBacktestService
         // "current" mirrors production exactly: crypto assets use the crypto
         // profile with history-floored analogs, everything else the full set.
         var currentOptions = MatchingOptions.ForMarket(asset.MarketType);
-        var minAnalogDate = currentOptions.DimensionFilter is not null && candles.Count > 0
-            ? candles[0].OpenTime
-            : (DateTime?)null;
 
         var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline, fromYear, toYear);
-        var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear, minAnalogDate);
+        var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear,
+            AnalogFloor(currentOptions.DimensionFilter is not null, candles));
 
         return new BacktestComparisonDto(baseline, current, Summarize(baseline, current));
     }
+
+    // Analogs before the asset's first candle can never be scored — the floor
+    // trades them for scoreable ones when a profile (or caller) asks for it.
+    private static DateTime? AnalogFloor(bool apply, List<Candle> candles) =>
+        apply && candles.Count > 0 ? candles[0].OpenTime : null;
 
     private async Task<(Asset Asset, List<MonthlySnapshot> Snapshots, List<Candle> Candles)> LoadDataAsync(
         string symbol, int days, CancellationToken ct)

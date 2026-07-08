@@ -24,6 +24,7 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokens;
     private readonly IGoogleTokenValidator _google;
     private readonly IEmailService _email;
+    private readonly IAnalyticsRepository _analytics;
     private readonly string _frontendUrl;
 
     public AuthService(
@@ -32,6 +33,7 @@ public class AuthService : IAuthService
         ITokenService tokens,
         IGoogleTokenValidator google,
         IEmailService email,
+        IAnalyticsRepository analytics,
         IConfiguration config)
     {
         _users = users;
@@ -39,6 +41,7 @@ public class AuthService : IAuthService
         _tokens = tokens;
         _google = google;
         _email = email;
+        _analytics = analytics;
         _frontendUrl = config["Frontend:Url"] ?? "http://localhost:3000";
     }
 
@@ -251,6 +254,8 @@ public class AuthService : IAuthService
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new KeyNotFoundException("Account not found.");
 
+        // GDPR: unlink search history first, then remove the account
+        await _analytics.DetachUserAsync(userId, ct);
         await _users.DeleteAsync(user, ct);
     }
 
