@@ -30,10 +30,20 @@ Controller steps before the math:
 2. **Gate check** + best-effort search logging.
 3. **On-demand ingestion**: first request for a coin registers it and pulls
    its full daily history from **Binance** — paginated (1000 candles per
-   page), requesting up to 10 years. In practice Binance history *starts at
-   the pair's listing*: **BTCUSDT and ETHUSDT begin 2017-08-17 (~8.9 years,
-   ~3,250 daily candles)**; younger coins have less. This hard data floor
-   drives both crypto-specific design decisions below.
+   page). Binance history starts at each pair's listing (BTCUSDT/ETHUSDT:
+   2017-08-17), so a **one-time backfill** (`CryptoHistoryBackfillService`)
+   splices older daily closes from the keyless **CoinMetrics Community API**
+   in front of the Binance data, subject to two floors:
+   - a global floor (2014-01-01) — pre-2013 crypto price discovery was too
+     thin to treat as evidence;
+   - a per-asset **maturity floor** (first traded date + 2 years) — an
+     asset's infancy hyper-growth is not analog evidence (validated: ETH's
+     2015-17 backfill made 2022+ odds *worse*, so the rule excludes it).
+
+   Net result: **BTC runs on ~12.5 years (2014→now, CoinMetrics→Binance
+   splice at 2017-08); ETH stays effectively Binance-only (2017-08→now)**
+   because its first two years end where Binance begins. Younger coins get
+   whatever mature history exists.
 
 Everything after that is `HistoricalOddsService.LoadContextAsync`, which sees
 `asset.MarketType == Crypto` and selects
@@ -79,10 +89,10 @@ to measure an outcome from. Without the floor, up to half of BTC's 40
 analogs were unscoreable dead weight; the effective sample behind the odds
 was ~8–20 episodes. With the floor, every selected analog is scoreable.
 
-The arithmetic consequence: BTC's candidate pool is ~96 months (2017-08 →
-six months ago), and 6-month declustering caps the selection at **~15
-analogs instead of 40** — but all 15 produce a measurable return, and the
-page's "Based on N historical macro periods" reflects that honestly.
+The arithmetic consequence: BTC's candidate pool is ~150 months (2014-01 →
+six months ago), and 6-month declustering caps the selection at **~20
+analogs instead of 40** — but all of them produce a measurable return, and
+the page's "Based on N historical macro periods" reflects that honestly.
 
 ---
 
@@ -137,6 +147,15 @@ The headline win: BTC's 6-month direction went from worse-than-a-coin-flip
 The backtest endpoint keeps `profile=crypto|default` and `floorHistory=`
 parameters so any future change must beat this table before shipping.
 
+**The BTC history backfill (July 2026)** was validated the same way, with a
+mixed but net-positive verdict on identical 2022+ eval months: 180d Brier
+improved 0.262→0.250, 90d 0.245→0.242, while 30d degraded 0.221→0.230 —
+2014-16 analogs help long horizons (a full extra cycle of 6-month outcomes)
+and add noise at short ones. It shipped because the Brier sum improves, the
+base rate now rests on 12.5 years, and walk-forward coverage nearly doubles
+(n≈115 vs 71 per horizon), which strengthens every future validation. ETH's
+backfill failed the same test and was excluded by the maturity rule.
+
 ## 6. What was built, tested, and deliberately turned OFF
 
 **Halving-phase + Mayer-multiple conditioning** (`CryptoCycle.CycleFactor`):
@@ -169,9 +188,10 @@ backtest `shrinkM` parameter.
 
 ## 7. Honest limitations
 
-- **Short history.** ~59–71 backtest points per horizon vs SPY's 319, from a
-  single 8.9-year window covering roughly two crypto cycles. Statistical
-  noise is large; treat all crypto odds as lower-confidence than equity odds.
+- **Short history.** ~91–115 backtest points per horizon vs SPY's 319 (BTC
+  from 2014, ETH from 2017) — roughly three crypto cycles for BTC, two for
+  ETH. Statistical noise is large; treat all crypto odds as lower-confidence
+  than equity odds.
 - **Macro-only drivers.** The fingerprint cannot see crypto-native shocks —
   exchange collapses, leverage flushes, ETF flows. Macro twins are not
   crypto twins; this is the main residual error source.
@@ -186,11 +206,11 @@ backtest `shrinkM` parameter.
 
 `GET /api/regime/odds/BTCUSDT`, 3-month horizon:
 
-1. Crypto profile → 16-dimension matching, candidates floored at 2017-08.
-2. 15 declustered analogs selected (earliest: Dec 2017), all scoreable.
-3. Kernel-weighted positive share of the 15 returns: raw ≈ 38%.
-4. BTC 90-day base rate over its full history: 52%.
-5. Published odds: 52 + 0.4 × (38 − 52) = **43.2%**, edge **−8.8pp** — the
+1. Crypto profile → 16-dimension matching, candidates floored at 2014-01.
+2. 20 declustered analogs selected (earliest: Jan 2014), all scoreable.
+3. Kernel-weighted positive share of the 20 returns: raw ≈ 34%.
+4. BTC 90-day base rate over its 12.5-year history: 53.5%.
+5. Published odds: 53.5 + 0.4 × (34 − 53.5) ≈ **46%**, edge **−7.5pp** — the
    current regime historically *worsened* BTC's coin-flip base rate.
-6. Breakdown: 8 analogs had BTC above its 200-day average at the time, 6
-   below, shown on the price chart as blue/amber dots — context, not signal.
+6. Breakdown: the analogs split by BTC's own 200-day-average state at the
+   time, shown on the price chart as blue/amber dots — context, not signal.

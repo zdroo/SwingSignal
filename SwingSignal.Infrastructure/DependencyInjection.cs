@@ -46,6 +46,7 @@ public static class DependencyInjection
 
         // Ingestion
         services.AddScoped<IAssetIngestionService, OnDemandIngestionService>();
+        services.AddScoped<CryptoHistoryBackfillService>();
         services.AddScoped<AssetSeeder>();
 
         // External data providers
@@ -53,6 +54,7 @@ public static class DependencyInjection
         services.AddHttpClient<FredApiClient>();
         services.AddHttpClient<DbNomicsApiClient>();
         services.AddHttpClient<BinanceApiClient>();
+        services.AddHttpClient<CoinMetricsApiClient>();
         services.AddHttpClient<YahooFinanceApiClient>();
         services.AddHttpClient<FearGreedApiClient>();
 

@@ -14,17 +14,20 @@ public class OnDemandIngestionService : IAssetIngestionService
     private readonly SwingSignalDbContext _db;
     private readonly BinanceApiClient _binance;
     private readonly YahooFinanceApiClient _yahoo;
+    private readonly CryptoHistoryBackfillService _backfill;
     private readonly ILogger<OnDemandIngestionService> _logger;
 
     public OnDemandIngestionService(
         SwingSignalDbContext db,
         BinanceApiClient binance,
         YahooFinanceApiClient yahoo,
+        CryptoHistoryBackfillService backfill,
         ILogger<OnDemandIngestionService> logger)
     {
         _db = db;
         _binance = binance;
         _yahoo = yahoo;
+        _backfill = backfill;
         _logger = logger;
     }
 
@@ -112,6 +115,10 @@ public class OnDemandIngestionService : IAssetIngestionService
                 await _db.SaveChangesAsync(ct);
                 _logger.LogInformation("Ingested {Count} candles on-demand for {Symbol}", newCandles.Count, asset.Symbol);
             }
+
+            // New crypto assets get their pre-Binance history immediately so
+            // the first odds request already sees the deepest analog pool
+            await _backfill.BackfillAsync(asset, ct);
         }
         catch (Exception ex)
         {

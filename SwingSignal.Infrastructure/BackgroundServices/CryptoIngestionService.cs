@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Entities;
 using SwingSignal.Domain.Enums;
 using SwingSignal.Infrastructure.ExternalClients;
+using SwingSignal.Infrastructure.Ingestion;
 using SwingSignal.Infrastructure.Persistence;
 
 namespace SwingSignal.Infrastructure.BackgroundServices;
@@ -41,6 +42,7 @@ public class CryptoIngestionService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SwingSignalDbContext>();
         var binance = scope.ServiceProvider.GetRequiredService<BinanceApiClient>();
+        var backfill = scope.ServiceProvider.GetRequiredService<CryptoHistoryBackfillService>();
 
         var cryptoAssets = await db.Assets
             .Where(a => a.IsActive && a.MarketType == MarketType.Crypto)
@@ -102,6 +104,16 @@ public class CryptoIngestionService : BackgroundService
                 {
                     _logger.LogError(ex, "Failed to ingest {Symbol} {Interval}", asset.Symbol, interval);
                 }
+            }
+
+            // Pre-Binance history (no-op once done — cheap min-date check)
+            try
+            {
+                await backfill.BackfillAsync(asset, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Backfill failed for {Symbol}", asset.Symbol);
             }
         }
     }
