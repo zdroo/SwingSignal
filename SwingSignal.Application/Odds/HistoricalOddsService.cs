@@ -34,7 +34,7 @@ public class HistoricalOddsService : IHistoricalOddsService
         if (!ctx.HasData)
             return EmptyOdds(ctx.Asset);
 
-        var (asset, candles, matches, weighted) = ctx;
+        var (asset, candles, matches, weighted, options) = ctx;
         var currentPrice = ctx.CurrentPrice;
 
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
@@ -44,9 +44,9 @@ public class HistoricalOddsService : IHistoricalOddsService
             Name:        asset.Name,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            OneMonth:    ComputeOdds(ComputeReturns(candles, weighted, 30), currentPrice, CandleMath.ComputeBaseRate(candles, 30)),
-            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90)),
-            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180)),
+            OneMonth:    ComputeOdds(ComputeReturns(candles, weighted, 30), currentPrice, CandleMath.ComputeBaseRate(candles, 30), options),
+            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90), options),
+            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180), options),
             Explanations: explanations,
             Disclaimer:  Disclaimer,
             Breakdown:   ComputeBreakdown(candles, matches)
@@ -130,7 +130,7 @@ public class HistoricalOddsService : IHistoricalOddsService
                 "Insufficient historical data to compute odds.");
         }
 
-        var (asset, candles, matches, weighted) = ctx;
+        var (asset, candles, matches, weighted, options) = ctx;
         var currentPrice = ctx.CurrentPrice;
         var returns = ComputeReturns(candles, weighted, days);
 
@@ -140,7 +140,7 @@ public class HistoricalOddsService : IHistoricalOddsService
             Days:        days,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            Odds:        ComputeOdds(returns, currentPrice, CandleMath.ComputeBaseRate(candles, days)),
+            Odds:        ComputeOdds(returns, currentPrice, CandleMath.ComputeBaseRate(candles, days), options),
             Disclaimer:  Disclaimer
         );
     }
@@ -152,7 +152,8 @@ public class HistoricalOddsService : IHistoricalOddsService
         Asset Asset,
         List<Candle> Candles,
         List<HistoricalMatchDto> Matches,
-        List<(DateTime Date, double Weight)> WeightedAnalogs)
+        List<(DateTime Date, double Weight)> WeightedAnalogs,
+        MatchingOptions Options)
     {
         public bool HasData => Matches.Count > 0 && Candles.Count > 0;
         public decimal CurrentPrice => Candles[^1].Close;
@@ -174,7 +175,7 @@ public class HistoricalOddsService : IHistoricalOddsService
             : ConditionOnCryptoCycle(options, candles,
                 ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
 
-        return new OddsContext(asset, candles, matches, weighted);
+        return new OddsContext(asset, candles, matches, weighted, options);
     }
 
     // The candidate floor travels with the crypto profile: analogs before the
@@ -266,9 +267,12 @@ public class HistoricalOddsService : IHistoricalOddsService
     // Kernel-weighted analog odds, shrunk toward the asset's base rate.
     // The shrinkage acknowledges that a few dozen analog periods can't support
     // extreme probability claims; the edge (odds - base rate) is what the
-    // regime signal actually contributes.
+    // regime signal actually contributes. With a ShrinkagePrior set, the
+    // shrinkage scales with the Kish effective sample size, so assets with
+    // thin history automatically publish humbler odds.
     private static OddsForPeriodDto ComputeOdds(
-        List<(decimal Return, double Weight)> returns, decimal currentPrice, double? baseRate)
+        List<(decimal Return, double Weight)> returns, decimal currentPrice, double? baseRate,
+        MatchingOptions options)
     {
         if (returns.Count == 0)
             return EmptyPeriod();
@@ -281,9 +285,13 @@ public class HistoricalOddsService : IHistoricalOddsService
 
         // Shrink toward the base rate when we know it; without a base rate
         // (very short candle history) fall back to the raw analog odds.
-        var shrunkOdds = baseRate is not null
-            ? baseRate.Value + MatchingOptions.Shrinkage * (rawOdds - baseRate.Value)
-            : rawOdds;
+        var shrunkOdds = baseRate is null
+            ? rawOdds
+            : options.ShrinkagePrior is double prior
+                ? OddsMath.AdaptiveShrink(
+                    rawOdds, baseRate.Value,
+                    OddsMath.EffectiveSampleSize(returns.Select(r => r.Weight).ToList()), prior)
+                : baseRate.Value + MatchingOptions.Shrinkage * (rawOdds - baseRate.Value);
 
         var sorted = returns.OrderBy(r => r.Return).ToList();
 

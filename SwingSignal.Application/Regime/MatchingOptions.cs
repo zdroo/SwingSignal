@@ -12,7 +12,8 @@ public record MatchingOptions(
     bool ShrinkToBaseRate,
     double? StateBandwidth,          // null = no asset-state conditioning; smaller = stricter
     MacroIndicatorType[]? DimensionFilter = null,  // null = match on all dimensions
-    double? CryptoCycleBandwidth = null) // null = no halving-phase/Mayer conditioning
+    double? CryptoCycleBandwidth = null, // null = no halving-phase/Mayer conditioning
+    double? ShrinkagePrior = null)   // null = legacy fixed shrinkage; else adaptive k = nEff/(nEff+prior)
 {
     // Asset-state conditioning is OFF in production: pre-2015 tuning showed gains
     // for QQQ/GLD, but they did not survive 2015+ validation (GLD reversed to a
@@ -37,9 +38,13 @@ public record MatchingOptions(
     // High enough to cover ~3 decades at 6-month spacing.
     public const int AnalogCount = 40;
 
-    // Shrinkage of raw analog odds toward the asset's base rate.
-    // 0 = pure base rate, 1 = raw analog odds. Small samples of noisy analogs
-    // justify heavy shrinkage; revisit once discrimination is proven.
+    // Fixed shrinkage of raw analog odds toward the asset's base rate
+    // (0 = pure base rate, 1 = raw analog odds). Adaptive evidence-scaled
+    // shrinkage (k = nEff/(nEff+M), OddsMath) was tested July 2026 at
+    // M ∈ {10..50}: flat-to-worse in BOTH tuning (pre-2022) and validation
+    // (2022+) — BTC 30d Brier degraded 0.221→0.234 because over-shrinking
+    // destroyed a real short-horizon signal. OFF in production; re-test via
+    // the backtest shrinkM parameter.
     public const double Shrinkage = 0.4;
 
     public string Label => this == Production ? "current"

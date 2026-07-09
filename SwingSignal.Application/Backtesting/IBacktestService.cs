@@ -12,6 +12,7 @@ public interface IBacktestService
         string symbol, int days, int topK = 10,
         int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
         string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
+        double? shrinkPrior = null,
         CancellationToken ct = default);
 
     Task<BacktestComparisonDto> CompareAsync(

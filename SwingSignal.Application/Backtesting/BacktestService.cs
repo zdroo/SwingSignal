@@ -38,6 +38,7 @@ public class BacktestService : IBacktestService
         string symbol, int days, int topK = 10,
         int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
         string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
+        double? shrinkPrior = null,
         CancellationToken ct = default)
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
@@ -59,7 +60,10 @@ public class BacktestService : IBacktestService
                 : stateBandwidth == 0 ? null : stateBandwidth,
             CryptoCycleBandwidth = cycleBandwidth is null
                 ? baseOptions.CryptoCycleBandwidth
-                : cycleBandwidth == 0 ? null : cycleBandwidth
+                : cycleBandwidth == 0 ? null : cycleBandwidth,
+            ShrinkagePrior = shrinkPrior is null
+                ? baseOptions.ShrinkagePrior
+                : shrinkPrior == 0 ? null : shrinkPrior
         };
 
         return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear,
@@ -193,6 +197,7 @@ public class BacktestService : IBacktestService
             var usable = 0;
             var totalWeight = 0.0;
             var positiveWeight = 0.0;
+            var usedWeights = new List<double>();
 
             for (var m = 0; m < matches.Count; m++)
             {
@@ -228,6 +233,7 @@ public class BacktestService : IBacktestService
 
                 usable++;
                 totalWeight += weight;
+                usedWeights.Add(weight);
                 if (exit.Close > entry.Close)
                     positiveWeight += weight;
             }
@@ -237,7 +243,12 @@ public class BacktestService : IBacktestService
             var predictedOdds = positiveWeight / totalWeight * 100;
 
             if (options.ShrinkToBaseRate && baseRate is not null)
-                predictedOdds = baseRate.Value + MatchingOptions.Shrinkage * (predictedOdds - baseRate.Value);
+            {
+                predictedOdds = options.ShrinkagePrior is double prior
+                    ? OddsMath.AdaptiveShrink(
+                        predictedOdds, baseRate.Value, OddsMath.EffectiveSampleSize(usedWeights), prior)
+                    : baseRate.Value + MatchingOptions.Shrinkage * (predictedOdds - baseRate.Value);
+            }
 
             var actualPositive = actualExit.Close > actualEntry.Close;
 

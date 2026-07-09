@@ -154,6 +154,17 @@ framing even without predictive power. This mirrors the asset-state
 conditioning story: we keep the plumbing, we don't ship what validation
 rejects.
 
+**Evidence-scaled (adaptive) shrinkage** (`OddsMath.AdaptiveShrink`): the
+statistically principled idea that thin-history assets should be pulled
+harder toward their base rate — `k = nEff/(nEff + M)` with `nEff` the Kish
+effective sample size of the analog weights. Tested July 2026 at
+M ∈ {10, 20, 50, 30}: flat-to-worse in both the pre-2022 tuning window and
+the 2022+ validation window. Most tellingly, BTC 30d degraded from
+0.221/76% to 0.234/70% — the crypto profile's short-horizon signal is
+*real*, and extra humility squashed it into the base rate. OFF in
+production (`MatchingOptions.ShrinkagePrior = null`); re-testable via the
+backtest `shrinkM` parameter.
+
 ---
 
 ## 7. Honest limitations

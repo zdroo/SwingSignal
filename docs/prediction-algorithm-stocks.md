@@ -184,6 +184,12 @@ claims. If the analogs say 85% and the base rate is 70%, we publish 76%. The
 **edge** (`odds − base`) is what the macro regime actually contributes, which
 is why the UI displays it next to every number.
 
+(An evidence-scaled alternative — shrinking harder when the effective analog
+sample is thin, `OddsMath.AdaptiveShrink` — was built and walk-forward tested
+in July 2026 and **rejected**: flat for SPY, worse for crypto's genuinely
+strong short horizons. The fixed 0.4 stays; the backtest `shrinkM` parameter
+allows re-testing.)
+
 **The rest of the response**, all from the same weighted return
 distribution:
 
