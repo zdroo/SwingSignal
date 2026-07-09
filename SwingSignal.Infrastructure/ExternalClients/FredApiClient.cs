@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Enums;
 
+using System.Globalization;
+
 namespace SwingSignal.Infrastructure.ExternalClients;
 
 public class FredApiClient
@@ -55,7 +57,7 @@ public class FredApiClient
         if (!SeriesIds.TryGetValue(type, out var seriesId))
             return [];
 
-        var startDate = (from ?? DateTime.UtcNow.AddYears(-5)).ToString("yyyy-MM-dd");
+        var startDate = (from ?? DateTime.UtcNow.AddYears(-5)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var url = $"https://api.stlouisfed.org/fred/series/observations"
                 + $"?series_id={seriesId}"
                 + $"&api_key={_apiKey}"

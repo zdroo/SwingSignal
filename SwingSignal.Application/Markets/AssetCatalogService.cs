@@ -20,7 +20,7 @@ public class AssetCatalogService : IAssetCatalogService
     public async Task<AssetDto?> CreateAsync(
         string symbol, string name, MarketType marketType, CancellationToken ct = default)
     {
-        var normalized = symbol.ToUpper();
+        var normalized = symbol.ToUpperInvariant();
 
         if (await _assets.ExistsAsync(normalized, ct))
             return null;

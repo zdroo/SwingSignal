@@ -10,15 +10,12 @@ function ConfirmEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
 
-  const [status, setStatus] = useState<"working" | "success" | "error">("working");
-  const [message, setMessage] = useState("");
+  // A missing token is known at first render — no effect needed for that case
+  const [status, setStatus] = useState<"working" | "success" | "error">(token ? "working" : "error");
+  const [message, setMessage] = useState(token ? "" : "This page needs a confirmation link from your email.");
 
   useEffect(() => {
-    if (!token) {
-      setStatus("error");
-      setMessage("This page needs a confirmation link from your email.");
-      return;
-    }
+    if (!token) return;
 
     let cancelled = false;
     api

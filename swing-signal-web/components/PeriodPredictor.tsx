@@ -50,36 +50,36 @@ function Target({
   );
 }
 
+// One keyed result instead of separate loading/gated/error flags: "loading" is
+// derived from a key mismatch, so the effect never resets state synchronously.
+type PredictorResult =
+  | { key: string; kind: "data"; data: AssetPeriodOddsDto }
+  | { key: string; kind: "gated" }
+  | { key: string; kind: "error"; message: string };
+
 export function PeriodPredictor({ symbol }: { symbol: string }) {
   const [days, setDays] = useState(30);
-  const [data, setData] = useState<AssetPeriodOddsDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [gated, setGated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<PredictorResult | null>(null);
+  const requestKey = `${symbol}:${days}`;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     // Debounce so dragging the slider doesn't fire a request per pixel
     const timer = setTimeout(() => {
       api
         .getOddsForPeriod(symbol, days)
-        .then((result) => {
-          if (!cancelled) setData(result);
+        .then((r) => {
+          if (!cancelled) setResult({ key: requestKey, kind: "data", data: r });
         })
         .catch((err) => {
           if (cancelled) return;
           if (err instanceof ApiError && err.status === 401) {
-            setGated(true);
+            setResult({ key: requestKey, kind: "gated" });
             track("gate_hit", { gate: "custom-window", symbol });
           } else {
-            setError("Could not compute odds for this period.");
+            setResult({ key: requestKey, kind: "error", message: "Could not compute odds for this period." });
           }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
         });
     }, 300);
 
@@ -87,8 +87,14 @@ export function PeriodPredictor({ symbol }: { symbol: string }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [symbol, days]);
+  }, [symbol, days, requestKey]);
 
+  const loading = result?.key !== requestKey;
+  // The gate is symbol-wide — once hit, keep showing it across window changes
+  const gated = result?.kind === "gated";
+  const error = !loading && result?.kind === "error" ? result.message : null;
+  // Previous window's numbers stay visible (dimmed) while the next loads
+  const data = result?.kind === "data" ? result.data : null;
   const odds = data?.odds;
   const hasData = odds && odds.totalCases > 0;
 

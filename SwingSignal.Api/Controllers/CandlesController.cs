@@ -25,7 +25,7 @@ public class CandlesController : ControllerBase
         var candles = await _candles.GetAsync(symbol, parsedInterval, limit, ct);
 
         if (candles.Count == 0)
-            return NotFound($"No candles found for {symbol.ToUpper()} on {interval} interval");
+            return NotFound($"No candles found for {symbol.ToUpperInvariant()} on {interval} interval");
 
         return Ok(candles);
     }

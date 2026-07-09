@@ -13,11 +13,17 @@ public class AssetRepository : IAssetRepository
     public Task<List<Asset>> GetAllActiveAsync(CancellationToken ct = default) =>
         _context.Assets.Where(a => a.IsActive).OrderBy(a => a.Symbol).ToListAsync(ct);
 
-    public Task<Asset?> GetBySymbolAsync(string symbol, CancellationToken ct = default) =>
-        _context.Assets.FirstOrDefaultAsync(a => a.Symbol == symbol.ToUpper(), ct);
+    public Task<Asset?> GetBySymbolAsync(string symbol, CancellationToken ct = default)
+    {
+        var upper = symbol.ToUpperInvariant();
+        return _context.Assets.FirstOrDefaultAsync(a => a.Symbol == upper, ct);
+    }
 
-    public Task<bool> ExistsAsync(string symbol, CancellationToken ct = default) =>
-        _context.Assets.AnyAsync(a => a.Symbol == symbol.ToUpper(), ct);
+    public Task<bool> ExistsAsync(string symbol, CancellationToken ct = default)
+    {
+        var upper = symbol.ToUpperInvariant();
+        return _context.Assets.AnyAsync(a => a.Symbol == upper, ct);
+    }
 
     public async Task AddAsync(Asset asset, CancellationToken ct = default)
     {

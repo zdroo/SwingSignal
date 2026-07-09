@@ -3,6 +3,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SwingSignal.Domain.Enums;
 
+using System.Globalization;
+
 namespace SwingSignal.Infrastructure.ExternalClients;
 
 public class BinanceApiClient
@@ -71,11 +73,11 @@ public class BinanceApiClient
 
             return raw?.Select(k => new RawCandle(
                 OpenTime: DateTimeOffset.FromUnixTimeMilliseconds(k[0].GetInt64()).UtcDateTime,
-                Open:     decimal.Parse(k[1].GetString()!),
-                High:     decimal.Parse(k[2].GetString()!),
-                Low:      decimal.Parse(k[3].GetString()!),
-                Close:    decimal.Parse(k[4].GetString()!),
-                Volume:   decimal.Parse(k[5].GetString()!)
+                Open:     decimal.Parse(k[1].GetString()!, CultureInfo.InvariantCulture),
+                High:     decimal.Parse(k[2].GetString()!, CultureInfo.InvariantCulture),
+                Low:      decimal.Parse(k[3].GetString()!, CultureInfo.InvariantCulture),
+                Close:    decimal.Parse(k[4].GetString()!, CultureInfo.InvariantCulture),
+                Volume:   decimal.Parse(k[5].GetString()!, CultureInfo.InvariantCulture)
             )).ToList() ?? [];
         }
         catch (Exception ex)

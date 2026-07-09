@@ -13,6 +13,8 @@ namespace SwingSignal.Api.Extensions;
 ///   compute            10/min  — expensive analysis (backtests)
 public static class RateLimitingExtensions
 {
+    private static readonly string[] PolicyNames = ["auth", "register", "public-sensitive", "compute"];
+
     public static IServiceCollection AddAppRateLimiting(this IServiceCollection services, IWebHostEnvironment environment)
     {
         // Integration tests must never be throttled
@@ -22,7 +24,7 @@ public static class RateLimitingExtensions
             {
                 options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(_ =>
                     RateLimitPartition.GetNoLimiter(string.Empty));
-                foreach (var policy in new[] { "auth", "register", "public-sensitive", "compute" })
+                foreach (var policy in PolicyNames)
                     options.AddPolicy(policy, _ => RateLimitPartition.GetNoLimiter(string.Empty));
             });
             return services;

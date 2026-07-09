@@ -160,8 +160,8 @@ public class HistoricalOddsService : IHistoricalOddsService
 
     private async Task<OddsContext> LoadContextAsync(string symbol, CancellationToken ct)
     {
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
-            ?? throw new NotFoundException($"Asset {symbol.ToUpper()} not found");
+        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
+            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
 
         var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
 

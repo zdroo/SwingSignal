@@ -322,7 +322,7 @@ public class MacroExplainerService : IAssetExplainerService
 
         var dates = matches
             .Take(3)
-            .Select(m => m.Date.ToString("MMM yyyy"))
+            .Select(m => m.Date.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture))
             .ToList();
 
         bullets.Add(

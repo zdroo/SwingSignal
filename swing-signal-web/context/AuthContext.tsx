@@ -44,6 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Deliberate post-mount hydration: restoring the session in a lazy
+  // initializer would make the first client render (logged-in navbar) differ
+  // from the server-rendered HTML and trip React's hydration mismatch.
+  /* eslint-disable react-hooks/set-state-in-effect -- SSR-safe session hydration, see above */
   useEffect(() => {
     const stored = localStorage.getItem(USER_KEY);
     const expiry = localStorage.getItem(EXPIRY_KEY);
@@ -76,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const login = useCallback(async (email: string, password: string) => {
     const auth = await api.login(email, password);

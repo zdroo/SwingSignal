@@ -12,14 +12,17 @@ public class CandleRepository : ICandleRepository
     public CandleRepository(SwingSignalDbContext context) => _context = context;
 
     public async Task<List<Candle>> GetBySymbolAsync(
-        string symbol, CandleInterval interval, int limit = 500, CancellationToken ct = default) =>
-        await _context.Candles
+        string symbol, CandleInterval interval, int limit = 500, CancellationToken ct = default)
+    {
+        var upper = symbol.ToUpperInvariant();
+        return await _context.Candles
             .Include(c => c.Asset)
-            .Where(c => c.Asset.Symbol == symbol.ToUpper() && c.Interval == interval)
+            .Where(c => c.Asset.Symbol == upper && c.Interval == interval)
             .OrderByDescending(c => c.OpenTime)
             .Take(limit)
             .OrderBy(c => c.OpenTime)
             .ToListAsync(ct);
+    }
 
     public Task<List<Candle>> GetDailyHistoryAsync(Guid assetId, CancellationToken ct = default) =>
         _context.Candles

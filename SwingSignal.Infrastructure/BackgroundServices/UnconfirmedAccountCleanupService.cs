@@ -25,8 +25,9 @@ public class UnconfirmedAccountCleanupService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var ct = stoppingToken;
         while (!ct.IsCancellationRequested)
         {
             try

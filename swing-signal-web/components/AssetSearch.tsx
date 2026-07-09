@@ -29,19 +29,24 @@ export function AssetSearch() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Clearing on short input lives in the change handler; the effect only fetches
+  const handleChange = (v: string) => {
+    setValue(v);
+    if (v.trim().length < 2) {
+      setResults([]);
+      setOpen(false);
+    }
+  };
+
   // Debounced autocomplete lookup
   useEffect(() => {
     const q = value.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setOpen(false);
-      return;
-    }
+    if (q.length < 2) return;
 
     let cancelled = false;
-    setSearching(true);
 
     const timer = setTimeout(() => {
+      setSearching(true);
       api
         .searchSymbols(q)
         .then((r) => {
@@ -114,7 +119,7 @@ export function AssetSearch() {
           <input
             type="text"
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setOpen(true)}
             placeholder="Type a name or symbol — apple, bitcoin, EUR/USD ..."

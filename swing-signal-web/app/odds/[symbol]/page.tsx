@@ -114,18 +114,21 @@ export default function OddsPage() {
   const symbol = decodeURIComponent(params.symbol);
   const { user, loading: authLoading } = useAuth();
 
-  const [odds, setOdds] = useState<AssetOddsDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [gated, setGated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // One keyed result instead of separate loading/gated/error flags: "loading"
+  // is derived (the stored key doesn't match the requested one yet), so the
+  // effect never needs to reset state synchronously.
+  type OddsResult =
+    | { key: string; kind: "data"; odds: AssetOddsDto }
+    | { key: string; kind: "gated" }
+    | { key: string; kind: "error"; message: string };
+
+  const [result, setResult] = useState<OddsResult | null>(null);
+  const requestKey = `${symbol}|${user?.email ?? ""}`;
 
   useEffect(() => {
     if (authLoading) return; // wait until the token is loaded so the fetch carries it
 
     let cancelled = false;
-    setLoading(true);
-    setGated(false);
-    setError(null);
 
     api
       .getAssetOdds(symbol, {
@@ -133,26 +136,32 @@ export default function OddsPage() {
         src: searchParams.get("src") ?? undefined,
       })
       .then((r) => {
-        if (!cancelled) setOdds(r);
+        if (!cancelled) setResult({ key: requestKey, kind: "data", odds: r });
       })
       .catch((err) => {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 401) {
-          setGated(true);
+          setResult({ key: requestKey, kind: "gated" });
           track("gate_hit", { gate: "symbol", symbol });
         } else {
-          setError(`Could not load odds for "${symbol}". New symbols take a few seconds to fetch — try again shortly.`);
+          setResult({
+            key: requestKey,
+            kind: "error",
+            message: `Could not load odds for "${symbol}". New symbols take a few seconds to fetch — try again shortly.`,
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, authLoading, user?.email]);
+  }, [requestKey, authLoading]);
+
+  const loading = authLoading || result?.key !== requestKey;
+  const gated = !loading && result?.kind === "gated";
+  const error = !loading && result?.kind === "error" ? result.message : null;
+  const odds = !loading && result?.kind === "data" ? result.odds : null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">

@@ -43,7 +43,7 @@ public static class SymbolNormalizer
         var trimmed = symbol.Trim();
         if (Aliases.TryGetValue(trimmed, out var canonical))
             return canonical;
-        return trimmed.ToUpper();
+        return trimmed.ToUpperInvariant();
     }
 
     public static MarketType DetectMarketType(string symbol)

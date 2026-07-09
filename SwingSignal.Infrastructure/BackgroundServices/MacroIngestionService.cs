@@ -46,8 +46,9 @@ public class MacroIngestionService : BackgroundService
         _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var ct = stoppingToken;
         // Run once on startup, then every 24 hours
         while (!ct.IsCancellationRequested)
         {

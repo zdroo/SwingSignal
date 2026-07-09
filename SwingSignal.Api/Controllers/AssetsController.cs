@@ -55,7 +55,7 @@ public class AssetsController : ControllerBase
         var created = await _catalog.CreateAsync(request.Symbol, request.Name, marketType, ct);
 
         return created is null
-            ? Conflict($"Asset {request.Symbol.ToUpper()} already exists")
+            ? Conflict($"Asset {request.Symbol.ToUpperInvariant()} already exists")
             : CreatedAtAction(nameof(GetAll), created);
     }
 }

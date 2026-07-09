@@ -95,8 +95,8 @@ public class BacktestService : IBacktestService
         if (days is < 7 or > 365)
             throw new ValidationException("days must be between 7 and 365");
 
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpper(), ct)
-            ?? throw new NotFoundException($"Asset {symbol.ToUpper()} not found");
+        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
+            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
 
         var snapshots = await _snapshots.BuildAllAsync(ct);
         var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
