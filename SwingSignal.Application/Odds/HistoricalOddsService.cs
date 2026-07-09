@@ -30,13 +30,26 @@ public class HistoricalOddsService : IHistoricalOddsService
 
     public async Task<AssetOddsDto> GetOddsAsync(string symbol, CancellationToken ct = default)
     {
-        var ctx = await LoadContextAsync(symbol, ct);
-        if (!ctx.HasData)
-            return EmptyOdds(ctx.Asset);
+        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
+            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
 
-        var (asset, candles, matches, weighted, options) = ctx;
-        var currentPrice = ctx.CurrentPrice;
+        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
 
+        // Horizon-split profiles: short windows and long windows want
+        // different analog evidence (crypto: cycle gauges vs macro depth).
+        // For non-crypto both profiles are the same instance — one load.
+        var longOptions = MatchingOptions.ForMarket(asset.MarketType, 90);
+        var shortOptions = MatchingOptions.ForMarket(asset.MarketType, 30);
+
+        var (matches, weighted) = await LoadAnalogsAsync(candles, longOptions, ct);
+        var (_, shortWeighted) = ReferenceEquals(shortOptions, longOptions)
+            ? (matches, weighted)
+            : await LoadAnalogsAsync(candles, shortOptions, ct);
+
+        if (matches.Count == 0 || candles.Count == 0)
+            return EmptyOdds(asset);
+
+        var currentPrice = candles[^1].Close;
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
         return new AssetOddsDto(
@@ -44,9 +57,9 @@ public class HistoricalOddsService : IHistoricalOddsService
             Name:        asset.Name,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            OneMonth:    ComputeOdds(ComputeReturns(candles, weighted, 30), currentPrice, CandleMath.ComputeBaseRate(candles, 30), options),
-            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90), options),
-            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180), options),
+            OneMonth:    ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, CandleMath.ComputeBaseRate(candles, 30), shortOptions),
+            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90), longOptions),
+            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180), longOptions),
             Explanations: explanations,
             Disclaimer:  Disclaimer,
             Breakdown:   ComputeBreakdown(candles, matches)
@@ -121,17 +134,23 @@ public class HistoricalOddsService : IHistoricalOddsService
         if (days is < 7 or > 365)
             throw new ValidationException("days must be between 7 and 365");
 
-        var ctx = await LoadContextAsync(symbol, ct);
-        if (!ctx.HasData)
+        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
+            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
+
+        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
+
+        var options = MatchingOptions.ForMarket(asset.MarketType, days);
+        var (matches, weighted) = await LoadAnalogsAsync(candles, options, ct);
+
+        if (matches.Count == 0 || candles.Count == 0)
         {
             return new AssetPeriodOddsDto(
-                ctx.Asset.Symbol, ctx.Asset.Name, days, 0, null,
+                asset.Symbol, asset.Name, days, 0, null,
                 EmptyPeriod(),
                 "Insufficient historical data to compute odds.");
         }
 
-        var (asset, candles, matches, weighted, options) = ctx;
-        var currentPrice = ctx.CurrentPrice;
+        var currentPrice = candles[^1].Close;
         var returns = ComputeReturns(candles, weighted, days);
 
         return new AssetPeriodOddsDto(
@@ -145,28 +164,10 @@ public class HistoricalOddsService : IHistoricalOddsService
         );
     }
 
-    // Everything both odds endpoints need: the asset, its candles, the analogs
-    // matched under the asset's profile (crypto = liquidity dimensions +
-    // history-floored analogs), and the fully weighted analog list.
-    private sealed record OddsContext(
-        Asset Asset,
-        List<Candle> Candles,
-        List<HistoricalMatchDto> Matches,
-        List<(DateTime Date, double Weight)> WeightedAnalogs,
-        MatchingOptions Options)
+    // Analogs matched under one profile, kernel-weighted and conditioned
+    private async Task<(List<HistoricalMatchDto> Matches, List<(DateTime Date, double Weight)> Weighted)>
+        LoadAnalogsAsync(List<Candle> candles, MatchingOptions options, CancellationToken ct)
     {
-        public bool HasData => Matches.Count > 0 && Candles.Count > 0;
-        public decimal CurrentPrice => Candles[^1].Close;
-    }
-
-    private async Task<OddsContext> LoadContextAsync(string symbol, CancellationToken ct)
-    {
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
-            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
-
-        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
-
-        var options = MatchingOptions.ForMarket(asset.MarketType);
         var matches = await _regime.FindSimilarPeriodsAsync(
             MatchingOptions.AnalogCount, options, MinAnalogDate(options, candles), ct);
 
@@ -175,7 +176,7 @@ public class HistoricalOddsService : IHistoricalOddsService
             : ConditionOnCryptoCycle(options, candles,
                 ConditionOnAssetState(candles, ApplyKernelWeights(matches)));
 
-        return new OddsContext(asset, candles, matches, weighted, options);
+        return (matches, weighted);
     }
 
     // The candidate floor travels with the crypto profile: analogs before the

@@ -38,16 +38,25 @@ public record MatchingOptions(
         FloorAnalogsToAssetHistory = true,
     };
 
-    // Crypto profile + on-chain cycle gauges — validation-neutral (see
-    // MacroSnapshotBuilder.CryptoDimensionsWithNatives), kept for re-testing
-    // via the backtest profile "crypto-native".
-    public static readonly MatchingOptions CryptoNativeExperiment = CryptoProduction with
+    // Crypto profile + on-chain cycle gauges. Production for SHORT horizons
+    // only: walk-forward showed the gauges sharpen short-horizon matching
+    // (BTC 30d 0.230→0.224) and make long-horizon analogs overconfident
+    // (180d 0.250→0.259). Re-testable at any horizon via the backtest
+    // profile "crypto-native".
+    public static readonly MatchingOptions CryptoShortHorizon = CryptoProduction with
     {
         DimensionFilter = MacroSnapshotBuilder.CryptoDimensionsWithNatives,
     };
 
-    public static MatchingOptions ForMarket(MarketType marketType) =>
-        marketType == MarketType.Crypto ? CryptoProduction : Production;
+    // Horizon boundary between the crypto profiles. Declared a priori as the
+    // midpoint between the validated cells (30d wants cycle gauges, 90d/180d
+    // want macro-only depth) — deliberately NOT tuned.
+    public const int ShortHorizonMaxDays = 45;
+
+    public static MatchingOptions ForMarket(MarketType marketType, int horizonDays) =>
+        marketType != MarketType.Crypto ? Production
+            : horizonDays <= ShortHorizonMaxDays ? CryptoShortHorizon
+            : CryptoProduction;
 
     // How many declustered analog periods feed the odds when KernelAllHistory is on.
     // High enough to cover ~3 decades at 6-month spacing.
@@ -65,5 +74,6 @@ public record MatchingOptions(
     public string Label => this == Production ? "current"
         : this == Baseline ? "baseline"
         : this == CryptoProduction ? "crypto"
+        : this == CryptoShortHorizon ? "crypto-short"
         : "custom";
 }

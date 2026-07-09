@@ -135,11 +135,15 @@ public class HistoricalOddsServiceTests
         candleRepo.Setup(c => c.GetDailyHistoryAsync(btcId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(candles);
 
-        // Strict mock: the service must ask for the crypto profile with analogs
-        // floored at the first candle's date — any other arguments throw.
+        // Strict mock: the service must ask for BOTH horizon profiles (long for
+        // 3M/6M/breakdown, short for 1M), each floored at the first candle's
+        // date — any other arguments throw.
         var regime = new Mock<IMacroRegimeService>(MockBehavior.Strict);
         regime.Setup(r => r.FindSimilarPeriodsAsync(
                 MatchingOptions.AnalogCount, MatchingOptions.CryptoProduction, Start, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(matches);
+        regime.Setup(r => r.FindSimilarPeriodsAsync(
+                MatchingOptions.AnalogCount, MatchingOptions.CryptoShortHorizon, Start, It.IsAny<CancellationToken>()))
             .ReturnsAsync(matches);
 
         var explainer = new Mock<IAssetExplainerService>();
@@ -154,6 +158,8 @@ public class HistoricalOddsServiceTests
         Assert.Equal(600m, result.CurrentPrice);
         regime.Verify(r => r.FindSimilarPeriodsAsync(
             MatchingOptions.AnalogCount, MatchingOptions.CryptoProduction, Start, It.IsAny<CancellationToken>()), Times.Once);
+        regime.Verify(r => r.FindSimilarPeriodsAsync(
+            MatchingOptions.AnalogCount, MatchingOptions.CryptoShortHorizon, Start, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

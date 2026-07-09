@@ -51,7 +51,26 @@ Everything after that is `HistoricalOddsService.LoadContextAsync`, which sees
 
 ---
 
-## 2. Crypto difference #1 — the liquidity-focused fingerprint
+## 2. Crypto difference #0 — horizon-split profiles
+
+Since July 2026 crypto matching is **horizon-aware**
+(`MatchingOptions.ForMarket(marketType, horizonDays)`, boundary fixed a
+priori at 45 days):
+
+- **≤ 45 days** (the 1M card, short custom windows): the liquidity
+  fingerprint below **plus five crypto-native cycle gauges** — Mayer
+  Multiple (BTC/200DMA), miner Puell, hash-rate YoY, stablecoin-supply YoY,
+  ETH/BTC YoY. Short outcomes are driven by the crypto market's own cycle
+  microclimate; walk-forward validated (BTC 30d Brier 0.230→0.224 on 2022+).
+- **> 45 days** (3M/6M cards, long windows): macro-only fingerprint with the
+  full 2014+ analog depth. Long outcomes are driven by the slow liquidity
+  regime; adding cycle gauges here made analogs overconfident (validated and
+  therefore excluded).
+
+Stocks use one profile at every horizon. The 3M/6M analog set also powers
+the price-chart dots and the analog breakdown.
+
+## 2b. Crypto difference #1 — the liquidity-focused fingerprint
 
 The full fingerprint has 31 dimensions across 7 families (see the stocks
 doc). For crypto, matching uses only the **16 dimensions**

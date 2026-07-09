@@ -46,9 +46,9 @@ public class BacktestService : IBacktestService
         var baseOptions = profile switch
         {
             "crypto"        => MatchingOptions.CryptoProduction,
-            "crypto-native" => MatchingOptions.CryptoNativeExperiment,
+            "crypto-native" => MatchingOptions.CryptoShortHorizon,
             "default"       => MatchingOptions.Production,
-            _               => MatchingOptions.ForMarket(asset.MarketType),
+            _               => MatchingOptions.ForMarket(asset.MarketType, days),
         };
 
         // An explicit 0 disables conditioning; null keeps the production setting
@@ -76,9 +76,9 @@ public class BacktestService : IBacktestService
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
 
-        // "current" mirrors production exactly: crypto assets use the crypto
-        // profile with history-floored analogs, everything else the full set.
-        var currentOptions = MatchingOptions.ForMarket(asset.MarketType);
+        // "current" mirrors production exactly: crypto assets use the
+        // horizon-appropriate crypto profile, everything else the full set.
+        var currentOptions = MatchingOptions.ForMarket(asset.MarketType, days);
 
         var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline, fromYear, toYear);
         var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear,

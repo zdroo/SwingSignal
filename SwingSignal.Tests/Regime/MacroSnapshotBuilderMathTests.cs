@@ -290,13 +290,20 @@ public class MacroSnapshotBuilderMathTests
     }
 
     [Fact]
-    public void MatchingOptions_ForMarket_SelectsProfile()
+    public void MatchingOptions_ForMarket_SelectsProfileByMarketAndHorizon()
     {
-        Assert.Same(MatchingOptions.CryptoProduction, MatchingOptions.ForMarket(MarketType.Crypto));
-        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Stock));
-        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Index));
+        // Crypto splits at the a-priori 45-day boundary
+        Assert.Same(MatchingOptions.CryptoShortHorizon, MatchingOptions.ForMarket(MarketType.Crypto, 30));
+        Assert.Same(MatchingOptions.CryptoShortHorizon, MatchingOptions.ForMarket(MarketType.Crypto, 45));
+        Assert.Same(MatchingOptions.CryptoProduction, MatchingOptions.ForMarket(MarketType.Crypto, 46));
+        Assert.Same(MatchingOptions.CryptoProduction, MatchingOptions.ForMarket(MarketType.Crypto, 180));
+
+        // Non-crypto: one profile at every horizon
+        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Stock, 30));
+        Assert.Same(MatchingOptions.Production, MatchingOptions.ForMarket(MarketType.Index, 180));
 
         Assert.Equal("crypto", MatchingOptions.CryptoProduction.Label);
+        Assert.Equal("crypto-short", MatchingOptions.CryptoShortHorizon.Label);
         Assert.Equal(MacroSnapshotBuilder.CryptoDimensions, MatchingOptions.CryptoProduction.DimensionFilter);
     }
 
@@ -308,17 +315,18 @@ public class MacroSnapshotBuilderMathTests
         Assert.All(MacroSnapshotBuilder.CryptoNativeIndicators, d =>
             Assert.DoesNotContain(d, MacroSnapshotBuilder.MacroDimensions));
 
-        // Validation-neutral: natives sit only in the re-test profile, not production crypto
+        // Natives belong to the short-horizon profile only; the long-horizon
+        // crypto profile stays macro-only (walk-forward validated split)
         Assert.All(MacroSnapshotBuilder.CryptoNativeIndicators, d =>
         {
             Assert.DoesNotContain(d, MacroSnapshotBuilder.CryptoDimensions);
             Assert.Contains(d, MacroSnapshotBuilder.CryptoDimensionsWithNatives);
         });
         Assert.Equal(MacroSnapshotBuilder.CryptoDimensionsWithNatives,
-            MatchingOptions.CryptoNativeExperiment.DimensionFilter);
+            MatchingOptions.CryptoShortHorizon.DimensionFilter);
 
         Assert.True(MatchingOptions.CryptoProduction.FloorAnalogsToAssetHistory);
-        Assert.True(MatchingOptions.CryptoNativeExperiment.FloorAnalogsToAssetHistory);
+        Assert.True(MatchingOptions.CryptoShortHorizon.FloorAnalogsToAssetHistory);
         Assert.False(MatchingOptions.Production.FloorAnalogsToAssetHistory);
     }
 }

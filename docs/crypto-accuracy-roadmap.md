@@ -21,11 +21,10 @@ cells: **+0.001 (exactly neutral)** — BTC 30d clearly better (0.241→0.230
 full-range, 0.230→0.224 on 2022+), BTC 180d clearly worse (0.250→0.259 on
 2022+), direction accuracy +11pp net, SPY bit-for-bit unchanged. The cycle
 gauges sharpen short-horizon matching but make long-horizon analogs
-overconfident. Per protocol a wash doesn't ship: production crypto matching
-stays on the 16 macro dims; the five native series stay **fully ingested**
-and re-testable via backtest `profile=crypto-native`. Natural revisits:
-family down-weighting for the native family, or Phase C horizon-split
-profiles (natives short, macro-only long).
+overconfident. Per protocol a wash doesn't ship as a blanket change — but the split
+verdict is exactly what motivated Phase C, which then shipped the native
+gauges for **short horizons only** (see below). The extended profile also
+stays re-testable at any horizon via backtest `profile=crypto-native`.
 
 **MVRV footnote:** bitcoin-data.com turned out to serve only a rolling
 ~4-year window, so MVRV is ingested (2022+) but not matchable — the Mayer
@@ -63,12 +62,22 @@ past; a trailing window (e.g. 5y) would drop ETH's predicted 59% toward the
 observed 53%. One knob → strict tune/validate split. Cheap to A/B behind a
 backtest parameter.
 
-## Phase C — horizon-dependent analog floor
+## Phase C — horizon-split profiles (SHIPPED July 2026)
 
-Measured trade-off from the BTC backfill: 2014-16 analogs improved 180d
-(0.262→0.250) but degraded 30d (0.221→0.230). Letting short horizons use
-only post-2017 analogs while long horizons use all would recover both.
-Another knob; validate strictly, and only if the 30d cost proves to matter.
+The week produced two mirrored trade-offs: the 2014+ backfill helped 180d
+and hurt 30d; the crypto-native gauges helped 30d and hurt 180d. One shared
+config forced every horizon to average those away. Now
+`MatchingOptions.ForMarket(marketType, horizonDays)` splits crypto at an
+**a-priori 45-day boundary** (midpoint between the validated 30d and 90d
+cells — deliberately not tuned): horizons ≤45d use the crypto profile
+*plus* the native cycle gauges; longer horizons stay macro-only with full
+2014+ analog depth. Stocks unchanged at every horizon.
+
+Validation (2022+, walk-forward): BTC 30d **0.224 / 67%**, 90d 0.242, 180d
+**0.250 / 59%** — the best previously-measured value at every horizon
+simultaneously, no interaction effects; ETH 30d improved to 0.235/61%
+full-range; SPY bit-for-bit unchanged. This retroactively banks both
+Phase A's short-horizon gain and the backfill's long-horizon gain.
 
 ## Phase D — funding rates (short-horizon leverage gauge)
 
