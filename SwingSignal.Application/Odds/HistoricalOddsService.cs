@@ -57,9 +57,9 @@ public class HistoricalOddsService : IHistoricalOddsService
             Name:        asset.Name,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            OneMonth:    ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, CandleMath.ComputeBaseRate(candles, 30), shortOptions),
-            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, CandleMath.ComputeBaseRate(candles, 90), longOptions),
-            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, CandleMath.ComputeBaseRate(candles, 180), longOptions),
+            OneMonth:    ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, BaseRateFor(candles, 30, shortOptions), shortOptions),
+            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, BaseRateFor(candles, 90, longOptions), longOptions),
+            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, BaseRateFor(candles, 180, longOptions), longOptions),
             Explanations: explanations,
             Disclaimer:  Disclaimer,
             Breakdown:   ComputeBreakdown(candles, matches)
@@ -159,10 +159,18 @@ public class HistoricalOddsService : IHistoricalOddsService
             Days:        days,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            Odds:        ComputeOdds(returns, currentPrice, CandleMath.ComputeBaseRate(candles, days), options),
+            Odds:        ComputeOdds(returns, currentPrice, BaseRateFor(candles, days, options), options),
             Disclaimer:  Disclaimer
         );
     }
+
+    // The profile decides whether the base rate spans all history or only
+    // the trailing window (crypto: early bull-heavy years distort "normal")
+    private static double? BaseRateFor(List<Candle> candles, int days, MatchingOptions options) =>
+        CandleMath.ComputeBaseRate(candles, days,
+            options.BaseRateTrailingYears is int years && candles.Count > 0
+                ? candles[^1].OpenTime.AddYears(-years)
+                : null);
 
     // Analogs matched under one profile, kernel-weighted and conditioned
     private async Task<(List<HistoricalMatchDto> Matches, List<(DateTime Date, double Weight)> Weighted)>

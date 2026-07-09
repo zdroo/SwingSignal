@@ -108,4 +108,30 @@ public class CandleMathTests
         var candles = DailyCandles(600, i => 1000m - i);
         Assert.Equal(0.0, CandleMath.ComputeBaseRate(candles, horizonDays: 90));
     }
+
+    [Fact]
+    public void ComputeBaseRate_TrailingCutoff_UsesOnlyRecentWindows()
+    {
+        // 1200 days: first 600 falling, last 600 rising. All-history mixes both;
+        // a cutoff inside the rising half sees only positive exits.
+        var candles = DailyCandles(1200, i => i < 600 ? 2000m - i : 1000m + i);
+        var cutoff = new DateTime(2020, 1, 1).AddDays(700);
+
+        var allHistory = CandleMath.ComputeBaseRate(candles, horizonDays: 90);
+        var trailing = CandleMath.ComputeBaseRate(candles, horizonDays: 90, since: cutoff);
+
+        Assert.NotNull(allHistory);
+        Assert.True(allHistory < 100.0);
+        Assert.Equal(100.0, trailing);
+    }
+
+    [Fact]
+    public void ComputeBaseRate_TrailingCutoff_TooFewRecentSamples_ReturnsNull()
+    {
+        var candles = DailyCandles(1200, i => i + 1);
+        // Cutoff so late that fewer than 24 windows exit after it
+        var cutoff = new DateTime(2020, 1, 1).AddDays(1150);
+
+        Assert.Null(CandleMath.ComputeBaseRate(candles, horizonDays: 90, since: cutoff));
+    }
 }

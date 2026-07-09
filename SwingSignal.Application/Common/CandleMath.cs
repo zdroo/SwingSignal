@@ -68,11 +68,16 @@ public static class CandleMath
         return samples.OrderBy(s => s.Item1).ToList();
     }
 
-    /// Share of ALL historical windows of this length that ended positive.
-    /// Null when there isn't enough history for a meaningful base rate.
-    public static double? ComputeBaseRate(List<Candle> candles, int horizonDays)
+    /// Share of historical windows of this length that ended positive —
+    /// across all history, or only windows exiting on/after `since` when a
+    /// trailing cutoff is given. Null when there isn't enough history for a
+    /// meaningful base rate.
+    public static double? ComputeBaseRate(List<Candle> candles, int horizonDays, DateTime? since = null)
     {
         var samples = SampleOutcomes(candles, horizonDays);
+        if (since is not null)
+            samples = samples.Where(s => s.ExitDate >= since).ToList();
+
         if (samples.Count < MinBaseRateSamples) return null;
 
         return (double)samples.Count(s => s.Positive) / samples.Count * 100;

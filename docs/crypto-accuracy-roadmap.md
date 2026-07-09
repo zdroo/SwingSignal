@@ -55,12 +55,17 @@ its `mvrv` chart but kept miner metrics. bitcoin-data.com is the one free
 MVRV source; if it dies, the fallback is Mayer Multiple (price/200DMA) from
 our own candles as a weaker cycle gauge.
 
-## Phase B — trailing-window base rate (fixes the measured ETH lean)
+## Phase B — trailing-window base rate (TESTED July 2026 — REJECTED)
 
 Hypothesis: the all-history base rate over-weights crypto's mostly-bull
-past; a trailing window (e.g. 5y) would drop ETH's predicted 59% toward the
-observed 53%. One knob → strict tune/validate split. Cheap to A/B behind a
-backtest parameter.
+past; a trailing window would drop ETH's predicted ~59% toward the observed
+~53%. Tested with an a-priori 5-year window (no sweep): **flat-to-worse
+everywhere** (ETH 180d Brier 0.276→0.282, BTC ±0.002), and the mechanism
+was backwards — the last five years are *more* bull-tilted than full
+history including the 2014-15/2018 winters, so the trailing base rate made
+predictions MORE bullish. Conclusion: the ETH lean lives in the analog
+outcomes, not the base rate. Plumbing kept (`baseRateYears` backtest
+param); don't re-propose without a different mechanism for the lean.
 
 ## Phase C — horizon-split profiles (SHIPPED July 2026)
 

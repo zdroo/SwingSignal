@@ -38,7 +38,7 @@ public class BacktestService : IBacktestService
         string symbol, int days, int topK = 10,
         int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
         string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
-        double? shrinkPrior = null,
+        double? shrinkPrior = null, int? baseRateYears = null,
         CancellationToken ct = default)
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
@@ -62,7 +62,10 @@ public class BacktestService : IBacktestService
                 : cycleBandwidth == 0 ? null : cycleBandwidth,
             ShrinkagePrior = shrinkPrior is null
                 ? baseOptions.ShrinkagePrior
-                : shrinkPrior == 0 ? null : shrinkPrior
+                : shrinkPrior == 0 ? null : shrinkPrior,
+            BaseRateTrailingYears = baseRateYears is null
+                ? baseOptions.BaseRateTrailingYears
+                : baseRateYears == 0 ? null : baseRateYears
         };
 
         return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear,
@@ -127,8 +130,11 @@ public class BacktestService : IBacktestService
 
         // Pre-sampled outcomes for the walk-forward base rate: only windows whose
         // outcome was observable before the evaluation month may contribute.
+        // With a trailing window, samples older than the window fall out again
+        // (two pointers over the exit-date-ordered list — still no lookahead).
         var baseRateSamples = CandleMath.SampleOutcomes(candles, days);
         var baseRateIdx = 0;
+        var baseRateStart = 0;
         var baseRatePositive = 0;
 
         // Pre-sampled asset states for walk-forward normalization of the
@@ -164,8 +170,20 @@ public class BacktestService : IBacktestService
                 baseRateIdx++;
             }
 
-            double? baseRate = baseRateIdx >= CandleMath.MinBaseRateSamples
-                ? (double)baseRatePositive / baseRateIdx * 100
+            if (options.BaseRateTrailingYears is int trailingYears)
+            {
+                var windowStart = evalMonth.AddYears(-trailingYears);
+                while (baseRateStart < baseRateIdx &&
+                       baseRateSamples[baseRateStart].ExitDate < windowStart)
+                {
+                    if (baseRateSamples[baseRateStart].Positive) baseRatePositive--;
+                    baseRateStart++;
+                }
+            }
+
+            var baseRateCount = baseRateIdx - baseRateStart;
+            double? baseRate = baseRateCount >= CandleMath.MinBaseRateSamples
+                ? (double)baseRatePositive / baseRateCount * 100
                 : null;
 
             // Advance the walk-forward state normalization stats

@@ -14,7 +14,8 @@ public record MatchingOptions(
     MacroIndicatorType[]? DimensionFilter = null,  // null = match on all dimensions
     double? CryptoCycleBandwidth = null, // null = no halving-phase/Mayer conditioning
     double? ShrinkagePrior = null,   // null = legacy fixed shrinkage; else adaptive k = nEff/(nEff+prior)
-    bool FloorAnalogsToAssetHistory = false) // analogs only from months the asset traded
+    bool FloorAnalogsToAssetHistory = false, // analogs only from months the asset traded
+    int? BaseRateTrailingYears = null) // null = all-history base rate; else only the last N years
 {
     // Asset-state conditioning is OFF in production: pre-2015 tuning showed gains
     // for QQQ/GLD, but they did not survive 2015+ validation (GLD reversed to a

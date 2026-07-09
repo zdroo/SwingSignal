@@ -33,6 +33,7 @@ public class BacktestController : ControllerBase
         [FromQuery] bool? floorHistory = null,
         [FromQuery] double? cycleH = null,
         [FromQuery] double? shrinkM = null,
+        [FromQuery] int? baseRateYears = null,
         CancellationToken ct = default)
     {
         if (days is < 7 or > 365)
@@ -50,7 +51,7 @@ public class BacktestController : ControllerBase
         if (asset is null)
             return StatusCode(503, $"Could not fetch data for symbol '{normalized}'.");
 
-        return Ok(await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, cycleH, shrinkM, ct));
+        return Ok(await _backtest.RunAsync(normalized, days, topK, fromYear, toYear, stateH, profile, floorHistory, cycleH, shrinkM, baseRateYears, ct));
     }
 
     // Runs the backtest twice — naive baseline vs current algorithm — to
