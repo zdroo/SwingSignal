@@ -182,7 +182,7 @@ public class HistoricalOddsService : IHistoricalOddsService
     // asset's first candle can never be scored, so for short-history assets
     // they only shrink the effective sample.
     private static DateTime? MinAnalogDate(MatchingOptions options, List<Candle> candles) =>
-        options.DimensionFilter is not null && candles.Count > 0
+        options.FloorAnalogsToAssetHistory && candles.Count > 0
             ? candles[0].OpenTime
             : null;
 

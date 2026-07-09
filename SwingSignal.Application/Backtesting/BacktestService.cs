@@ -43,14 +43,13 @@ public class BacktestService : IBacktestService
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
 
-        var useCrypto = profile switch
+        var baseOptions = profile switch
         {
-            "crypto"  => true,
-            "default" => false,
-            _         => asset.MarketType == Domain.Enums.MarketType.Crypto,
+            "crypto"        => MatchingOptions.CryptoProduction,
+            "crypto-native" => MatchingOptions.CryptoNativeExperiment,
+            "default"       => MatchingOptions.Production,
+            _               => MatchingOptions.ForMarket(asset.MarketType),
         };
-
-        var baseOptions = useCrypto ? MatchingOptions.CryptoProduction : MatchingOptions.Production;
 
         // An explicit 0 disables conditioning; null keeps the production setting
         var options = baseOptions with
@@ -67,7 +66,7 @@ public class BacktestService : IBacktestService
         };
 
         return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear,
-            AnalogFloor(floorHistory ?? useCrypto, candles));
+            AnalogFloor(floorHistory ?? baseOptions.FloorAnalogsToAssetHistory, candles));
     }
 
     public async Task<BacktestComparisonDto> CompareAsync(
@@ -83,7 +82,7 @@ public class BacktestService : IBacktestService
 
         var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline, fromYear, toYear);
         var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear,
-            AnalogFloor(currentOptions.DimensionFilter is not null, candles));
+            AnalogFloor(currentOptions.FloorAnalogsToAssetHistory, candles));
 
         return new BacktestComparisonDto(baseline, current, Summarize(baseline, current));
     }

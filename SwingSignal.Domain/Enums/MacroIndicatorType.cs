@@ -44,4 +44,14 @@ public enum MacroIndicatorType
     Yield10YMomentum6M,        // 6-month change of the 10Y yield
     HighYieldSpreadMomentum6M, // 6-month change of HY credit spreads
     CpiMomentum6M,             // 6-month change of CPI YoY (inflation accelerating vs cooling)
+
+    // Crypto-native cycle gauges — matched only by the crypto profile,
+    // invisible to stock matching. All BTC-market-wide: crypto trades as one
+    // liquidity block, so BTC's cycle position contexts every coin.
+    CryptoMvrv,          // market cap / realized cap (bitcoin-data.com; free depth only ~4y — ingested, not matched)
+    CryptoMinerPuell,    // daily miner revenue / its 365d average (blockchain.info)
+    CryptoHashRate,      // network hash rate, compared as YoY growth (blockchain.info)
+    StablecoinSupply,    // USDT+USDC market cap, compared as YoY growth (CoinMetrics)
+    CryptoEthBtcRatio,   // ETH/BTC from our own candles, compared as YoY change
+    CryptoMayerMultiple, // BTC close / its 200-day average, from our own candles — the price-based MVRV stand-in
 }

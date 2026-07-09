@@ -299,4 +299,26 @@ public class MacroSnapshotBuilderMathTests
         Assert.Equal("crypto", MatchingOptions.CryptoProduction.Label);
         Assert.Equal(MacroSnapshotBuilder.CryptoDimensions, MatchingOptions.CryptoProduction.DimensionFilter);
     }
+
+    [Fact]
+    public void CryptoNativeDimensions_NeverLeakIntoStockMatching()
+    {
+        // Production (stocks/ETFs/forex) filters to the macro-only fingerprint
+        Assert.Equal(MacroSnapshotBuilder.MacroDimensions, MatchingOptions.Production.DimensionFilter);
+        Assert.All(MacroSnapshotBuilder.CryptoNativeIndicators, d =>
+            Assert.DoesNotContain(d, MacroSnapshotBuilder.MacroDimensions));
+
+        // Validation-neutral: natives sit only in the re-test profile, not production crypto
+        Assert.All(MacroSnapshotBuilder.CryptoNativeIndicators, d =>
+        {
+            Assert.DoesNotContain(d, MacroSnapshotBuilder.CryptoDimensions);
+            Assert.Contains(d, MacroSnapshotBuilder.CryptoDimensionsWithNatives);
+        });
+        Assert.Equal(MacroSnapshotBuilder.CryptoDimensionsWithNatives,
+            MatchingOptions.CryptoNativeExperiment.DimensionFilter);
+
+        Assert.True(MatchingOptions.CryptoProduction.FloorAnalogsToAssetHistory);
+        Assert.True(MatchingOptions.CryptoNativeExperiment.FloorAnalogsToAssetHistory);
+        Assert.False(MatchingOptions.Production.FloorAnalogsToAssetHistory);
+    }
 }

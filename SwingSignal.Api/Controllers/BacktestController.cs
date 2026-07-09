@@ -41,8 +41,8 @@ public class BacktestController : ControllerBase
         if (topK is < 1 or > 20)
             return BadRequest("topK must be between 1 and 20");
 
-        if (profile is not null and not "crypto" and not "default")
-            return BadRequest("profile must be 'crypto' or 'default'");
+        if (profile is not null and not "crypto" and not "default" and not "crypto-native")
+            return BadRequest("profile must be 'crypto', 'crypto-native' or 'default'");
 
         var normalized = SymbolNormalizer.Normalize(symbol);
 

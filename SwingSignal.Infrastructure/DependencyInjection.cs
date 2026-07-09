@@ -55,6 +55,8 @@ public static class DependencyInjection
         services.AddHttpClient<DbNomicsApiClient>();
         services.AddHttpClient<BinanceApiClient>();
         services.AddHttpClient<CoinMetricsApiClient>();
+        services.AddHttpClient<BitcoinDataApiClient>();
+        services.AddHttpClient<BlockchainInfoApiClient>();
         services.AddHttpClient<YahooFinanceApiClient>();
         services.AddHttpClient<FearGreedApiClient>();
 

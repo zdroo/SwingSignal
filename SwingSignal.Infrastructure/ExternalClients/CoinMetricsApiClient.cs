@@ -27,12 +27,23 @@ public class CoinMetricsApiClient
     public async Task<List<RawCandle>> GetDailyClosesAsync(
         string coin, DateTime from, DateTime to, CancellationToken ct = default)
     {
+        var series = await GetMetricSeriesAsync(coin, "PriceUSD", from, to, ct);
+        return series
+            .Select(p => new RawCandle(p.Date, p.Value, p.Value, p.Value, p.Value, Volume: 0))
+            .ToList();
+    }
+
+    /// Any community-tier daily metric (PriceUSD, CapMrktCurUSD, SplyCur, ...)
+    /// for an asset between two dates, oldest first. Zero/negative values are skipped.
+    public async Task<List<(DateTime Date, decimal Value)>> GetMetricSeriesAsync(
+        string coin, string metric, DateTime from, DateTime to, CancellationToken ct = default)
+    {
         var url = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics" +
-                  $"?assets={coin.ToLowerInvariant()}&metrics=PriceUSD&frequency=1d" +
+                  $"?assets={coin.ToLowerInvariant()}&metrics={metric}&frequency=1d" +
                   $"&paging_from=start&page_size={PageSize}" +
                   $"&start_time={from:yyyy-MM-dd}&end_time={to:yyyy-MM-dd}";
 
-        var candles = new List<RawCandle>();
+        var points = new List<(DateTime, decimal)>();
 
         try
         {
@@ -46,15 +57,15 @@ public class CoinMetricsApiClient
 
                 foreach (var row in root.GetProperty("data").EnumerateArray())
                 {
-                    var price = decimal.Parse(row.GetProperty("PriceUSD").GetString()!, CultureInfo.InvariantCulture);
-                    if (price <= 0) continue;
+                    var value = decimal.Parse(row.GetProperty(metric).GetString()!, CultureInfo.InvariantCulture);
+                    if (value <= 0) continue;
 
                     var time = DateTime.Parse(
                         row.GetProperty("time").GetString()!,
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.AdjustToUniversal);
 
-                    candles.Add(new RawCandle(time, price, price, price, price, Volume: 0));
+                    points.Add((time, value));
                 }
 
                 url = root.TryGetProperty("next_page_url", out var next) ? next.GetString() : null;
@@ -62,10 +73,10 @@ public class CoinMetricsApiClient
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "CoinMetrics history fetch failed for {Coin}", coin);
+            _logger.LogError(ex, "CoinMetrics {Metric} fetch failed for {Coin}", metric, coin);
             return [];
         }
 
-        return candles;
+        return points;
     }
 }

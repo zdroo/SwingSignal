@@ -58,10 +58,27 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.CryptoFearGreed,
     ];
 
+    // Crypto-native cycle gauges (family 7) — ingested series only crypto
+    // matching sees. All BTC-market-wide: crypto trades as one liquidity block.
+    // MVRV is deliberately absent: its only free source (bitcoin-data.com)
+    // serves a rolling ~4-year window, and a dimension present on today's
+    // vector but missing from most candidates differentiates nothing. The
+    // Mayer Multiple is its price-based stand-in with full history; MVRV is
+    // still ingested so it can be promoted when a deep source appears.
+    public static readonly MacroIndicatorType[] CryptoNativeIndicators =
+    [
+        MacroIndicatorType.CryptoMayerMultiple,
+        MacroIndicatorType.CryptoMinerPuell,
+        MacroIndicatorType.CryptoHashRate,
+        MacroIndicatorType.StablecoinSupply,
+        MacroIndicatorType.CryptoEthBtcRatio,
+    ];
+
     // The subset crypto assets match on. Crypto prices respond to dollar
-    // liquidity, real rates, the Fed path and risk appetite; US labor, housing
-    // and commodity cycles mostly contribute noise for them. Momentum dims of
-    // the kept parents are included so the *direction* of policy still counts.
+    // liquidity, real rates, the Fed path, risk appetite and the crypto
+    // market's own cycle position; US labor, housing and commodity cycles
+    // mostly contribute noise for them. Momentum dims of the kept parents are
+    // included so the *direction* of policy still counts.
     public static readonly MacroIndicatorType[] CryptoDimensions =
     [
         // policy & liquidity
@@ -86,6 +103,15 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.HighYieldSpreadMomentum6M,
     ];
 
+    // CryptoDimensions + the crypto-native gauges. Tested July 2026 and NOT
+    // shipped: net-zero Brier across all asset/horizon cells (30d clearly
+    // better, 180d clearly worse — cycle gauges make long-horizon analogs
+    // overconfident), direction accuracy +11pp net. Re-testable via the
+    // backtest profile "crypto-native"; revisit with family down-weighting
+    // or horizon-split profiles.
+    public static readonly MacroIndicatorType[] CryptoDimensionsWithNatives =
+        [.. CryptoDimensions, .. CryptoNativeIndicators];
+
     // Trending level series are compared as YoY % change, not raw level.
     // A raw CPI z-score would just measure "how recent is this month" — the
     // meaningful signal is the inflation RATE, not the index level.
@@ -101,6 +127,10 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.RetailSales,
         MacroIndicatorType.HousingStarts,
         MacroIndicatorType.Copper,
+        // Trending crypto-native levels; MVRV and Puell are already ratios
+        MacroIndicatorType.CryptoHashRate,
+        MacroIndicatorType.StablecoinSupply,
+        MacroIndicatorType.CryptoEthBtcRatio,
     ];
 
     public const int MinSharedDimensions = 8;
@@ -154,6 +184,13 @@ public class MacroSnapshotBuilder
         [MacroIndicatorType.Yield10YMomentum6M]        = 1,
         [MacroIndicatorType.HighYieldSpreadMomentum6M] = 5,
         [MacroIndicatorType.CpiMomentum6M]             = 2,
+
+        // 7: crypto-native cycle gauges (crypto profile only)
+        [MacroIndicatorType.CryptoMayerMultiple] = 7,
+        [MacroIndicatorType.CryptoMinerPuell]    = 7,
+        [MacroIndicatorType.CryptoHashRate]      = 7,
+        [MacroIndicatorType.StablecoinSupply]    = 7,
+        [MacroIndicatorType.CryptoEthBtcRatio]   = 7,
     };
 
     // Parent series -> derived 6-month momentum dimension. Momentum is computed
@@ -169,9 +206,14 @@ public class MacroSnapshotBuilder
 
     private const int MomentumMonths = 6;
 
-    // Everything that can appear in a snapshot vector: stored indicators + derived momentum
-    public static readonly MacroIndicatorType[] AllDimensions =
+    // The macro-only fingerprint: stored macro indicators + derived momentum.
+    // This is what non-crypto assets match on (Production's dimension filter).
+    public static readonly MacroIndicatorType[] MacroDimensions =
         [.. VectorIndicators, .. MomentumPairs.Values];
+
+    // Everything that can appear in a snapshot vector
+    public static readonly MacroIndicatorType[] AllDimensions =
+        [.. MacroDimensions, .. CryptoNativeIndicators];
 
     private const int MinSharedFamilies = 5;
 
@@ -201,7 +243,8 @@ public class MacroSnapshotBuilder
     // YoY-transformed indicators are stored as % change vs the same month a year earlier.
     private async Task<List<MonthlySnapshot>> BuildUncachedAsync(CancellationToken ct)
     {
-        var allPoints = await _macro.GetForTypesAsync(VectorIndicators, ct);
+        var allPoints = await _macro.GetForTypesAsync(
+            [.. VectorIndicators, .. CryptoNativeIndicators], ct);
 
         if (allPoints.Count == 0) return [];
 
@@ -416,8 +459,8 @@ public class MacroSnapshotBuilder
         var currentVector = BuildZScoreVector(snapshots[asOfIndex].Values, stats);
 
         // A dimension filter narrows both the vector and the validity minimums:
-        // the crypto subset has 4 families by design, so the full-set minimums
-        // would reject every candidate.
+        // a filter spanning few families (the crypto profile) can't demand the
+        // full-set family minimum or every candidate would be rejected.
         var minShared = MinSharedDimensions;
         var minFamilies = MinSharedFamilies;
 
@@ -428,8 +471,14 @@ public class MacroSnapshotBuilder
                 .Where(kv => allowed.Contains(kv.Key))
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
 
+            var familySpan = options.DimensionFilter
+                .Where(FamilyOf.ContainsKey)
+                .Select(d => FamilyOf[d])
+                .Distinct()
+                .Count();
+
             minShared = Math.Min(MinSharedDimensions, options.DimensionFilter.Length / 2);
-            minFamilies = 3;
+            minFamilies = Math.Min(MinSharedFamilies, Math.Max(3, familySpan - 1));
         }
 
         if (currentVector.Count < minShared) return [];

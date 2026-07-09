@@ -94,7 +94,155 @@ public class MarketIndicatorIngestionService : BackgroundService
         {
             _logger.LogError(ex, "Failed to ingest Fear & Greed index");
         }
+
+        await IngestCryptoNativeAsync(scope, db, ct);
     }
+
+    // Crypto-native cycle gauges for the crypto matching profile. Each source
+    // is independent — one failing must not stop the others.
+    private async Task IngestCryptoNativeAsync(IServiceScope scope, SwingSignalDbContext db, CancellationToken ct)
+    {
+        // History floor: matches the earliest usable crypto candle era; there
+        // is no point storing gauge values no analog can pair with.
+        var floor = new DateTime(2013, 1, 1);
+
+        try
+        {
+            // Full range every run (chunked upstream); SavePointsAsync dedups.
+            // Incremental-from-latest would never heal gaps behind the newest point.
+            var bitcoinData = scope.ServiceProvider.GetRequiredService<BitcoinDataApiClient>();
+            var mvrv = await bitcoinData.GetMvrvAsync(floor, DateTime.UtcNow.Date, ct);
+            await SavePointsAsync(db, MacroIndicatorType.CryptoMvrv, mvrv, "bitcoin-data.com", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ingest MVRV");
+        }
+
+        try
+        {
+            var blockchainInfo = scope.ServiceProvider.GetRequiredService<BlockchainInfoApiClient>();
+
+            // Full revenue series every run: the Puell denominator (365d mean)
+            // needs the whole history anyway; SavePointsAsync dedups inserts.
+            var revenue = await blockchainInfo.GetChartAsync("miners-revenue", ct);
+            await SavePointsAsync(db, MacroIndicatorType.CryptoMinerPuell,
+                ToPuell(revenue).Where(p => p.Date >= floor), "blockchain.info", ct);
+
+            var hashRate = await blockchainInfo.GetChartAsync("hash-rate", ct);
+            await SavePointsAsync(db, MacroIndicatorType.CryptoHashRate,
+                hashRate.Where(p => p.Date >= floor), "blockchain.info", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ingest miner metrics");
+        }
+
+        try
+        {
+            var coinMetrics = scope.ServiceProvider.GetRequiredService<CoinMetricsApiClient>();
+            var latest = await LatestDateAsync(db, MacroIndicatorType.StablecoinSupply, ct);
+            var from = latest?.AddDays(1) ?? floor;
+
+            var usdt = await coinMetrics.GetMetricSeriesAsync("usdt", "CapMrktCurUSD", from, DateTime.UtcNow.Date, ct);
+            var usdc = await coinMetrics.GetMetricSeriesAsync("usdc", "CapMrktCurUSD", from, DateTime.UtcNow.Date, ct);
+
+            var usdcByDate = usdc.ToDictionary(p => p.Date.Date, p => p.Value);
+            var combined = usdt.Select(p =>
+                (p.Date.Date, p.Value + usdcByDate.GetValueOrDefault(p.Date.Date)));
+
+            await SavePointsAsync(db, MacroIndicatorType.StablecoinSupply, combined, "CoinMetrics", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ingest stablecoin supply");
+        }
+
+        try
+        {
+            await IngestEthBtcRatioAsync(db, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to compute ETH/BTC ratio");
+        }
+
+        try
+        {
+            await IngestMayerMultipleAsync(db, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to compute Mayer Multiple");
+        }
+    }
+
+    // BTC close / its 200-day average — the price-based MVRV stand-in,
+    // computed from our own candles so it reaches as deep as BTC history does
+    private async Task IngestMayerMultipleAsync(SwingSignalDbContext db, CancellationToken ct)
+    {
+        var closes = await db.Candles
+            .Where(c => c.Interval == CandleInterval.OneDay && c.Asset.Symbol == "BTCUSDT")
+            .OrderBy(c => c.OpenTime)
+            .Select(c => new { c.OpenTime, c.Close })
+            .ToListAsync(ct);
+
+        const int window = 200;
+        var points = new List<(DateTime Date, decimal Value)>();
+        decimal rollingSum = 0;
+
+        for (var i = 0; i < closes.Count; i++)
+        {
+            rollingSum += closes[i].Close;
+            if (i >= window) rollingSum -= closes[i - window].Close;
+            if (i >= window - 1 && rollingSum > 0)
+                points.Add((closes[i].OpenTime.Date, closes[i].Close / (rollingSum / window)));
+        }
+
+        await SavePointsAsync(db, MacroIndicatorType.CryptoMayerMultiple, points, "Computed", ct);
+    }
+
+    /// Puell multiple: each day's miner revenue over the mean of the trailing
+    /// 365 observations (inclusive). Days without a full window are skipped.
+    private static IEnumerable<(DateTime Date, decimal Value)> ToPuell(
+        List<(DateTime Date, decimal Value)> revenue)
+    {
+        const int window = 365;
+        decimal rollingSum = 0;
+
+        for (var i = 0; i < revenue.Count; i++)
+        {
+            rollingSum += revenue[i].Value;
+            if (i >= window) rollingSum -= revenue[i - window].Value;
+            if (i >= window - 1)
+                yield return (revenue[i].Date, revenue[i].Value / (rollingSum / window));
+        }
+    }
+
+    // ETH/BTC from our own candles — no external source needed
+    private async Task IngestEthBtcRatioAsync(SwingSignalDbContext db, CancellationToken ct)
+    {
+        var closes = await db.Candles
+            .Where(c => c.Interval == CandleInterval.OneDay &&
+                        (c.Asset.Symbol == "BTCUSDT" || c.Asset.Symbol == "ETHUSDT"))
+            .Select(c => new { c.Asset.Symbol, c.OpenTime, c.Close })
+            .ToListAsync(ct);
+
+        var btc = closes.Where(c => c.Symbol == "BTCUSDT")
+            .ToDictionary(c => c.OpenTime.Date, c => c.Close);
+
+        var ratio = closes
+            .Where(c => c.Symbol == "ETHUSDT" && btc.ContainsKey(c.OpenTime.Date) && btc[c.OpenTime.Date] > 0)
+            .Select(c => (c.OpenTime.Date, c.Close / btc[c.OpenTime.Date]));
+
+        await SavePointsAsync(db, MacroIndicatorType.CryptoEthBtcRatio, ratio, "Computed", ct);
+    }
+
+    private static Task<DateTime?> LatestDateAsync(
+        SwingSignalDbContext db, MacroIndicatorType type, CancellationToken ct) =>
+        db.MacroDataPoints
+            .Where(m => m.IndicatorType == type)
+            .MaxAsync(m => (DateTime?)m.Date, ct);
 
     private async Task SavePointsAsync(
         SwingSignalDbContext db,
