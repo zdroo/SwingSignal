@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SwingSignal.Api.Extensions;
@@ -10,6 +11,40 @@ using SwingSignal.Infrastructure.Persistence;
 using SwingSignal.Infrastructure.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Fail fast on missing production configuration — a half-configured deploy
+// must die at startup, not at the first user's registration email.
+if (builder.Environment.IsProduction())
+{
+    string[] required =
+    [
+        "ConnectionStrings:SqlServer",
+        "Jwt:Secret",
+        "Google:ClientId",
+        "Resend:ApiKey",
+        "Frontend:Url",
+    ];
+    var missing = required
+        .Where(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))
+        .ToList();
+    if (missing.Count > 0)
+        throw new InvalidOperationException(
+            $"Missing required production configuration: {string.Join(", ", missing)}");
+}
+
+// Behind a reverse proxy the client IP and scheme arrive in X-Forwarded-*;
+// without this the rate limiter would throttle the proxy's IP (one bucket
+// for every user) and HTTPS redirection could loop. No-op until enabled.
+if (builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled"))
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        // The proxy is the platform's own load balancer — addresses unknowable ahead of time
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
 
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
@@ -65,7 +100,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    app.UseHsts();
+}
 
+app.UseForwardedHeaders(); // must precede HTTPS redirect and the rate limiter
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors();

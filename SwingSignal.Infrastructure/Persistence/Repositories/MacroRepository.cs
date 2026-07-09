@@ -13,7 +13,7 @@ public class MacroRepository : IMacroRepository
 
     public async Task<List<MacroDataPoint>> GetByTypeAsync(
         MacroIndicatorType type, int limit = 100, CancellationToken ct = default) =>
-        await _context.MacroDataPoints
+        await _context.MacroDataPoints.AsNoTracking()
             .Where(m => m.IndicatorType == type)
             .OrderByDescending(m => m.Date)
             .Take(limit)
@@ -22,26 +22,26 @@ public class MacroRepository : IMacroRepository
 
     public Task<List<MacroDataPoint>> GetForTypesAsync(
         IReadOnlyCollection<MacroIndicatorType> types, CancellationToken ct = default) =>
-        _context.MacroDataPoints
+        _context.MacroDataPoints.AsNoTracking()
             .Where(m => types.Contains(m.IndicatorType))
             .OrderBy(m => m.Date)
             .ToListAsync(ct);
 
     public Task<List<MacroDataPoint>> GetSinceAsync(
         MacroIndicatorType type, DateTime from, CancellationToken ct = default) =>
-        _context.MacroDataPoints
+        _context.MacroDataPoints.AsNoTracking()
             .Where(m => m.IndicatorType == type && m.Date >= from)
             .OrderBy(m => m.Date)
             .ToListAsync(ct);
 
     public Task<MacroDataPoint?> GetLatestAsync(MacroIndicatorType type, CancellationToken ct = default) =>
-        _context.MacroDataPoints
+        _context.MacroDataPoints.AsNoTracking()
             .Where(m => m.IndicatorType == type)
             .OrderByDescending(m => m.Date)
             .FirstOrDefaultAsync(ct);
 
     public Task<DateTime?> GetLatestDateAsync(MacroIndicatorType type, CancellationToken ct = default) =>
-        _context.MacroDataPoints
+        _context.MacroDataPoints.AsNoTracking()
             .Where(m => m.IndicatorType == type)
             .MaxAsync(m => (DateTime?)m.Date, ct);
 

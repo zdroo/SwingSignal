@@ -15,7 +15,7 @@ public class CandleRepository : ICandleRepository
         string symbol, CandleInterval interval, int limit = 500, CancellationToken ct = default)
     {
         var upper = symbol.ToUpperInvariant();
-        return await _context.Candles
+        return await _context.Candles.AsNoTracking()
             .Include(c => c.Asset)
             .Where(c => c.Asset.Symbol == upper && c.Interval == interval)
             .OrderByDescending(c => c.OpenTime)
@@ -25,13 +25,13 @@ public class CandleRepository : ICandleRepository
     }
 
     public Task<List<Candle>> GetDailyHistoryAsync(Guid assetId, CancellationToken ct = default) =>
-        _context.Candles
+        _context.Candles.AsNoTracking()
             .Where(c => c.AssetId == assetId && c.Interval == CandleInterval.OneDay)
             .OrderBy(c => c.OpenTime)
             .ToListAsync(ct);
 
     public Task<DateTime?> GetLatestOpenTimeAsync(Guid assetId, CandleInterval interval, CancellationToken ct = default) =>
-        _context.Candles
+        _context.Candles.AsNoTracking()
             .Where(c => c.AssetId == assetId && c.Interval == interval)
             .MaxAsync(c => (DateTime?)c.OpenTime, ct);
 

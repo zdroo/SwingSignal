@@ -22,7 +22,9 @@ public static class DependencyInjection
     {
         // Persistence
         services.AddDbContext<SwingSignalDbContext>(options =>
-            options.UseSqlServer(config.GetConnectionString("SqlServer")));
+            options.UseSqlServer(
+                config.GetConnectionString("SqlServer"),
+                sql => sql.EnableRetryOnFailure())); // cloud SQL has transient faults
 
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<ICandleRepository, CandleRepository>();
