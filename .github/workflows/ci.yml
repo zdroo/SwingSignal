@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # SDK 10 is required for the .slnx solution format; projects target net8.0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # TreatWarningsAsErrors + AnalysisLevel latest-recommended are enforced
+      # via Directory.Build.props, so a warning-free build is part of the gate
+      - name: Build
+        run: dotnet build SwingSignal.slnx --configuration Release
+
+      # Unit tests are self-contained (mocked persistence — no SQL Server needed)
+      - name: Test
+        run: dotnet test SwingSignal.Tests/SwingSignal.Tests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
