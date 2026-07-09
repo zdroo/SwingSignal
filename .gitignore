@@ -10,11 +10,6 @@ TestResults/
 appsettings.Development.json
 appsettings.*.Local.json
 
-# Node / Next.js (swing-signal-web has its own .gitignore too)
-node_modules/
-.next/
-out/
-
 # Environment files
 .env
 .env.local

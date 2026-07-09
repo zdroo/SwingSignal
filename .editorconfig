@@ -1,4 +1,4 @@
-# Root editorconfig for SwingSignal — codifies the style the codebase already uses.
+# Root editorconfig for the SwingSignal backend — codifies the existing style.
 root = true
 
 [*]
@@ -10,11 +10,7 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-[*.{js,jsx,ts,tsx,json,css,mjs}]
-indent_style = space
-indent_size = 2
-
-[*.{yml,yaml}]
+[*.{json,yml,yaml}]
 indent_style = space
 indent_size = 2
 
