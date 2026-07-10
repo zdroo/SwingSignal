@@ -2,11 +2,29 @@ namespace SwingSignal.Contracts.Regime;
 
 public record MacroIndicatorValueDto(
     decimal Value,
-    string Signal,   // e.g. "Restrictive" | "Neutral" | "Accommodative"
-    string Trend);   // "Rising" | "Falling" | "Stable"
+    string Signal,        // e.g. "Restrictive" | "Neutral" | "Accommodative"
+    string Trend,         // "Rising" | "Falling" | "Stable"
+    string Tone,          // "good" | "neutral" | "caution" | "bad"
+    int Severity,         // 0 background … 3 extreme
+    bool IsMarketMover);  // severity at or above the market-mover threshold
+
+public record HealthMemberDto(string Key, string Signal, string Tone);
+
+public record HealthGroupDto(
+    string Name,
+    string Question,
+    int Score,            // 0–100
+    string Label,         // Stressed | Strained | Mixed | Steady | Supportive
+    List<HealthMemberDto> Members);
+
+/// Descriptive composite of today's signal states — summarizes the
+/// dashboard, is NOT a prediction and plays no role in the odds engine.
+public record MarketHealthDto(int Score, string Label, List<HealthGroupDto> Groups);
 
 public record MacroRegimeDto(
     Dictionary<string, MacroIndicatorValueDto> Indicators,
+    MarketHealthDto Health,
+    List<string> Summary, // the rule-based plain-words narrative
     DateTime AsOf);
 
 public record HistoricalMatchDto(

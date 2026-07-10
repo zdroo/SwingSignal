@@ -47,17 +47,29 @@ public class MacroRegimeService : IMacroRegimeService
                 : current < previous * 0.999m || (previous <= 0 && current < previous) ? "Falling"
                 : "Stable";
 
+            var signal = SignalClassifier.Classify(type, current);
+            var severity = RegimeInsight.SeverityOf(signal);
+
             indicators[type.ToString()] = new MacroIndicatorValueDto(
                 Math.Round(current, 2),
-                SignalClassifier.Classify(type, current),
-                trend);
+                signal,
+                trend,
+                RegimeInsight.ToneOf(signal),
+                severity,
+                severity >= RegimeInsight.MarketMoverThreshold);
         }
 
         var asOf = indicators.Count > 0
             ? await _macro.GetLatestDateOverallAsync(ct) ?? DateTime.UtcNow
             : DateTime.UtcNow;
 
-        return new MacroRegimeDto(indicators, asOf);
+        var signals = indicators.ToDictionary(kv => kv.Key, kv => kv.Value.Signal);
+
+        return new MacroRegimeDto(
+            indicators,
+            RegimeInsight.ComputeMarketHealth(signals),
+            RegimeInsight.Summarize(indicators),
+            asOf);
     }
 
     public async Task<List<HistoricalMatchDto>> FindSimilarPeriodsAsync(
