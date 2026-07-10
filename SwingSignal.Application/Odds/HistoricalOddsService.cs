@@ -52,17 +52,22 @@ public class HistoricalOddsService : IHistoricalOddsService
         var currentPrice = candles[^1].Close;
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
+        var oneMonth    = ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, BaseRateFor(candles, 30, shortOptions), shortOptions);
+        var threeMonths = ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, BaseRateFor(candles, 90, longOptions), longOptions);
+        var sixMonths   = ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, BaseRateFor(candles, 180, longOptions), longOptions);
+
         return new AssetOddsDto(
             Symbol:      asset.Symbol,
             Name:        asset.Name,
             MatchesUsed: matches.Count,
             CurrentPrice: currentPrice,
-            OneMonth:    ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, BaseRateFor(candles, 30, shortOptions), shortOptions),
-            ThreeMonths: ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, BaseRateFor(candles, 90, longOptions), longOptions),
-            SixMonths:   ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, BaseRateFor(candles, 180, longOptions), longOptions),
+            OneMonth:    oneMonth,
+            ThreeMonths: threeMonths,
+            SixMonths:   sixMonths,
             Explanations: explanations,
             Disclaimer:  Disclaimer,
-            Breakdown:   ComputeBreakdown(candles, matches)
+            Breakdown:   ComputeBreakdown(candles, matches),
+            TradeRead:   TradeRead.Compute(oneMonth, threeMonths, sixMonths, matches.Count)
         );
     }
 

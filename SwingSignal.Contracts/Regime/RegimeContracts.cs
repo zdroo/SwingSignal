@@ -75,6 +75,16 @@ public record AnalogBreakdownDto(
     decimal? BelowMedian3M,
     List<AnalogPointDto> Points);
 
+/// What the analog statistics support right now for this asset — a fixed
+/// rule-based read of the odds (edge vs base rate, consistency across
+/// horizons, sample size, risk spread). Descriptive, not advice.
+public record TradeReadDto(
+    string Stance,       // "Long bias" | "No edge" | "Stand aside"
+    int HorizonDays,     // the horizon the read keys on: 30 | 90 | 180
+    string Strength,     // "Strong" | "Moderate" | "Weak"
+    List<string> Reasons,
+    string Note);
+
 public record AssetOddsDto(
     string Symbol,
     string Name,
@@ -85,7 +95,8 @@ public record AssetOddsDto(
     OddsForPeriodDto SixMonths,
     List<string> Explanations,
     string Disclaimer,
-    AnalogBreakdownDto? Breakdown = null);
+    AnalogBreakdownDto? Breakdown = null,
+    TradeReadDto? TradeRead = null);
 
 // Odds for a single user-selected horizon (7-365 days)
 public record AssetPeriodOddsDto(
