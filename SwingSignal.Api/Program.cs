@@ -51,7 +51,10 @@ builder.Services.AddMemoryCache();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(
+    builder.Configuration,
+    // Background ingestion hits external APIs — never inside integration tests
+    includeBackgroundServices: !builder.Environment.IsEnvironment("Testing"));
 builder.Services.AddAppRateLimiting(builder.Environment);
 
 builder.Services.AddHealthChecks()
@@ -86,8 +89,10 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+// Integration tests provide their own (SQLite) schema and seed data
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<SwingSignalDbContext>();
     db.Database.Migrate();
 
@@ -116,3 +121,6 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+// Exposes the entry point to WebApplicationFactory in integration tests
+public partial class Program { }

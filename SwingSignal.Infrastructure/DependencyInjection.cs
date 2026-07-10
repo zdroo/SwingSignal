@@ -18,7 +18,8 @@ namespace SwingSignal.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services, IConfiguration config, bool includeBackgroundServices = true)
     {
         // Persistence
         services.AddDbContext<SwingSignalDbContext>(options =>
@@ -62,12 +63,15 @@ public static class DependencyInjection
         services.AddHttpClient<YahooFinanceApiClient>();
         services.AddHttpClient<FearGreedApiClient>();
 
-        // Scheduled ingestion
-        services.AddHostedService<MacroIngestionService>();
-        services.AddHostedService<CryptoIngestionService>();
-        services.AddHostedService<StockForexIngestionService>();
-        services.AddHostedService<MarketIndicatorIngestionService>();
-        services.AddHostedService<UnconfirmedAccountCleanupService>();
+        // Scheduled ingestion (skipped in integration tests — they call external APIs)
+        if (includeBackgroundServices)
+        {
+            services.AddHostedService<MacroIngestionService>();
+            services.AddHostedService<CryptoIngestionService>();
+            services.AddHostedService<StockForexIngestionService>();
+            services.AddHostedService<MarketIndicatorIngestionService>();
+            services.AddHostedService<UnconfirmedAccountCleanupService>();
+        }
 
         return services;
     }
