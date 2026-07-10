@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using SwingSignal.Api.Extensions;
 using SwingSignal.Api.Middleware;
 using SwingSignal.Application;
+using SwingSignal.Application.Common;
 using SwingSignal.Infrastructure;
 using SwingSignal.Infrastructure.Persistence;
 using SwingSignal.Infrastructure.Seed;
@@ -85,7 +86,15 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    // The paid boundary: endpoints carry this once their feature launches
+    options.AddPolicy("ProOnly", policy => policy.RequireClaim("plan", "Pro")));
+
+// Pro dark-launch switch: entitlement gates exist in code but only bite
+// when Features:ProEnabled is true (see ProFeatures)
+builder.Services.AddSingleton(new ProFeatures(
+    builder.Configuration.GetValue<bool>("Features:ProEnabled")));
+builder.Services.AddSingleton<IDailyQuota, InMemoryDailyQuota>();
 
 var app = builder.Build();
 

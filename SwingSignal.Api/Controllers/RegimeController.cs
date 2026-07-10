@@ -21,17 +21,23 @@ public class RegimeController : ControllerBase
     private readonly IHistoricalOddsService _odds;
     private readonly IAssetIngestionService _ingestion;
     private readonly ISearchLogService _searchLog;
+    private readonly ProFeatures _pro;
+    private readonly IDailyQuota _quota;
 
     public RegimeController(
         IMacroRegimeService regime,
         IHistoricalOddsService odds,
         IAssetIngestionService ingestion,
-        ISearchLogService searchLog)
+        ISearchLogService searchLog,
+        ProFeatures pro,
+        IDailyQuota quota)
     {
         _regime    = regime;
         _odds      = odds;
         _ingestion = ingestion;
         _searchLog = searchLog;
+        _pro       = pro;
+        _quota     = quota;
     }
 
     [HttpGet("current")]
@@ -90,6 +96,16 @@ public class RegimeController : ControllerBase
         // Custom windows are an account feature regardless of symbol
         if (User.Identity?.IsAuthenticated != true)
             return Unauthorized("Create a free account to use custom prediction windows.");
+
+        // Once Pro is live, Free accounts get a generous daily allowance;
+        // Pro removes the cap. Inactive while the flag is off.
+        if (_pro.GateActive(User.IsPro())
+            && !_quota.TryConsume(User.RequireUserId(), ProFeatures.CustomWindowDailyLimit))
+        {
+            throw new RateLimitedException(
+                $"You've used today's {ProFeatures.CustomWindowDailyLimit} custom windows. " +
+                "Pro removes this cap — or come back tomorrow.");
+        }
 
         var normalized = SymbolNormalizer.Normalize(symbol);
 

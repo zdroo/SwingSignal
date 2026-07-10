@@ -206,6 +206,20 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.False(string.IsNullOrEmpty(refreshDoc.RootElement.GetProperty("accessToken").GetString()));
     }
 
+    // ── Pro dark launch: with the flag OFF, no gate exists at all ─────────
+
+    [Fact]
+    public async Task ProFlagOff_ResearchBacktestParams_NotGatedForFreeUsers()
+    {
+        var (_, token) = await RegisterAsync();
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/backtest/SPY?fromYear=2022");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await _client.SendAsync(request);
+
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     // ── Rate limiter: the Testing environment must never throttle ────────
 
     [Fact]

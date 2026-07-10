@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SwingSignal.Api.Extensions;
 using SwingSignal.Application.Abstractions.Ingestion;
 using SwingSignal.Application.Backtesting;
 using SwingSignal.Application.Common;
@@ -8,17 +9,19 @@ namespace SwingSignal.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // account required; Pro-only once billing exists
+[Authorize] // standard backtests stay a free-account feature — the honesty proof
 [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("compute")]
 public class BacktestController : ControllerBase
 {
     private readonly IBacktestService _backtest;
     private readonly IAssetIngestionService _ingestion;
+    private readonly ProFeatures _pro;
 
-    public BacktestController(IBacktestService backtest, IAssetIngestionService ingestion)
+    public BacktestController(IBacktestService backtest, IAssetIngestionService ingestion, ProFeatures pro)
     {
         _backtest = backtest;
         _ingestion = ingestion;
+        _pro = pro;
     }
 
     [HttpGet("{symbol}")]
@@ -44,6 +47,14 @@ public class BacktestController : ControllerBase
 
         if (profile is not null and not "crypto" and not "default" and not "crypto-native")
             return BadRequest("profile must be 'crypto', 'crypto-native' or 'default'");
+
+        // Research knobs beyond the standard run become Pro once the flag
+        // is on; the default call (days + topK) stays free forever
+        var hasResearchParams = fromYear is not null || toYear is not null || stateH is not null
+            || profile is not null || floorHistory is not null || cycleH is not null
+            || shrinkM is not null || baseRateYears is not null;
+        if (hasResearchParams)
+            _pro.RequirePro(User.IsPro(), "Custom backtest parameters are a Pro feature.");
 
         var normalized = SymbolNormalizer.Normalize(symbol);
 

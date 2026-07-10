@@ -20,6 +20,12 @@ public sealed class AuthenticationFailedException : AppException
     public AuthenticationFailedException(string message) : base(message) { }
 }
 
+/// 403 — the caller is authenticated but their plan/permissions don't cover this.
+public sealed class ForbiddenException : AppException
+{
+    public ForbiddenException(string message) : base(message) { }
+}
+
 /// 404 — the addressed resource does not exist.
 public sealed class NotFoundException : AppException
 {

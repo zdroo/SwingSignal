@@ -31,6 +31,7 @@ public class ExceptionHandlingMiddleware
             {
                 ValidationException => (StatusCodes.Status400BadRequest, ex.Message),
                 AuthenticationFailedException => (StatusCodes.Status401Unauthorized, ex.Message),
+                ForbiddenException => (StatusCodes.Status403Forbidden, ex.Message),
                 NotFoundException => (StatusCodes.Status404NotFound, ex.Message),
                 ConflictException => (StatusCodes.Status409Conflict, ex.Message),
                 RateLimitedException => (StatusCodes.Status429TooManyRequests, ex.Message),

@@ -16,9 +16,13 @@ namespace SwingSignal.Tests.Integration;
 /// Boots the real API in the Testing environment: real middleware, auth,
 /// gates and controllers — with SQLite in-memory instead of SQL Server and
 /// stubs for everything that would leave the machine (email, ingestion).
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public class ApiFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
+
+    /// Override to boot with the Pro dark-launch flag ON (default mirrors
+    /// production today: off).
+    protected virtual bool ProEnabled => false;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -48,6 +52,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IAssetIngestionService>();
             services.AddScoped<IAssetIngestionService, StubIngestionService>();
+
+            // Replace the singleton rather than injecting config: appsettings.json
+            // loads after test config in the deferred host, so a config override
+            // for Features:ProEnabled would silently lose
+            if (ProEnabled)
+            {
+                services.RemoveAll<ProFeatures>();
+                services.AddSingleton(new ProFeatures(enabled: true));
+            }
         });
     }
 
