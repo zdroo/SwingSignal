@@ -64,11 +64,13 @@ public class MacroRegimeService : IMacroRegimeService
             : DateTime.UtcNow;
 
         var signals = indicators.ToDictionary(kv => kv.Key, kv => kv.Value.Signal);
+        var health = RegimeInsight.ComputeMarketHealth(signals);
 
         return new MacroRegimeDto(
             indicators,
-            RegimeInsight.ComputeMarketHealth(signals),
+            health,
             RegimeInsight.Summarize(indicators),
+            RegimeInsight.ComputePlaybook(health, signals),
             asOf);
     }
 

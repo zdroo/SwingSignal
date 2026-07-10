@@ -193,6 +193,169 @@ public class RegimeInsightTests
         Assert.Equal(severity, RegimeInsight.SeverityOf(signal));
     }
 
+    // ── Playbook ──────────────────────────────────────────────────────────
+
+    private static PlaybookDto Playbook(Dictionary<string, string> signals) =>
+        RegimeInsight.ComputePlaybook(RegimeInsight.ComputeMarketHealth(signals), signals);
+
+    [Theory]
+    [InlineData(100, "Favored")]
+    [InlineData(65, "Favored")]
+    [InlineData(64, "Neutral")]
+    [InlineData(45, "Neutral")]
+    [InlineData(44, "Headwinds")]
+    [InlineData(0, "Headwinds")]
+    public void VerdictOf_BandEdges(int score, string verdict)
+    {
+        Assert.Equal(verdict, RegimeInsight.VerdictOf(score));
+    }
+
+    [Fact]
+    public void Playbook_RiskOnRegime_FavorsStocksOverCash()
+    {
+        var playbook = Playbook(new Dictionary<string, string>
+        {
+            ["FedFundsRate"] = "Accommodative",
+            ["FedBalanceSheet"] = "QE (Expanding)",
+            ["M2MoneySupply"] = "Expanding",
+            ["ReverseRepo"] = "Low",
+            ["RealYield10Y"] = "Negative (Easy)",
+            ["TreasuryYield10Y"] = "Normal",
+            ["TreasuryYield2Y"] = "Normal",
+            ["TreasuryYield3M"] = "Normal",
+            ["YieldCurveSpread"] = "Healthy",
+            ["YieldSpread10Y3M"] = "Healthy",
+            ["CPI"] = "Low",
+            ["CorePCE"] = "On Target",
+            ["GDP"] = "Expanding",
+            ["UnemploymentRate"] = "Low",
+            ["JoblessClaims"] = "Low",
+            ["SahmRule"] = "No Signal",
+            ["RetailSales"] = "Strong",
+            ["HousingStarts"] = "Strong",
+            ["ConsumerSentiment"] = "Optimistic",
+            ["VIX"] = "Calm",
+            ["HighYieldSpread"] = "Low",
+            ["DollarIndex"] = "Weak USD",
+            ["CryptoFearGreed"] = "Neutral",
+        });
+
+        Assert.Equal(5, playbook.Assets.Count);
+        Assert.Equal("Stocks", playbook.Assets[0].Name);
+        Assert.Equal("Favored", playbook.Assets[0].Verdict);
+        Assert.Equal("Cash & T-Bills", playbook.Assets[^1].Name);
+        Assert.Equal("Headwinds", playbook.Assets[^1].Verdict);
+        Assert.Contains("Stocks", playbook.Headline);
+    }
+
+    [Fact]
+    public void Playbook_RecessionRegime_FavorsCashAndBonds_PunishesRiskAssets()
+    {
+        var playbook = Playbook(new Dictionary<string, string>
+        {
+            ["FedFundsRate"] = "Restrictive",
+            ["FedBalanceSheet"] = "QT (Contracting)",
+            ["M2MoneySupply"] = "Contracting",
+            ["ReverseRepo"] = "High",
+            ["RealYield10Y"] = "High",
+            ["TreasuryYield10Y"] = "High",
+            ["TreasuryYield2Y"] = "High",
+            ["TreasuryYield3M"] = "High",
+            ["YieldCurveSpread"] = "Inverted",
+            ["YieldSpread10Y3M"] = "Inverted",
+            ["CPI"] = "Low",          // inflation has cooled — the classic recession trade
+            ["CorePCE"] = "On Target",
+            ["GDP"] = "Contracting",
+            ["UnemploymentRate"] = "Elevated",
+            ["JoblessClaims"] = "Elevated",
+            ["SahmRule"] = "Recession Signal",
+            ["RetailSales"] = "Falling",
+            ["HousingStarts"] = "Falling",
+            ["ConsumerSentiment"] = "Pessimistic",
+            ["VIX"] = "Panic",
+            ["HighYieldSpread"] = "Stressed",
+            ["DollarIndex"] = "Strong USD",
+            ["CryptoFearGreed"] = "Extreme Fear",
+        });
+
+        Assert.Equal("Cash & T-Bills", playbook.Assets[0].Name);
+        Assert.Equal("Long-Term Bonds", playbook.Assets[1].Name);
+        Assert.Equal("Favored", playbook.Assets[1].Verdict);
+
+        var stocks = playbook.Assets.Single(a => a.Name == "Stocks");
+        var crypto = playbook.Assets.Single(a => a.Name == "Crypto (majors)");
+        Assert.Equal("Headwinds", stocks.Verdict);
+        Assert.Equal("Headwinds", crypto.Verdict);
+
+        var bonds = playbook.Assets.Single(a => a.Name == "Long-Term Bonds");
+        Assert.Contains(bonds.Reasons, r => r.Contains("rate cuts"));
+        var cash = playbook.Assets[0];
+        Assert.Contains(cash.Reasons, r => r.Contains("paid to wait"));
+        Assert.Contains(stocks.Reasons, r => r.Contains("Sahm Rule"));
+    }
+
+    [Fact]
+    public void Playbook_StagflationRegime_RanksGoldAboveStocksAndBonds()
+    {
+        var playbook = Playbook(new Dictionary<string, string>
+        {
+            ["FedFundsRate"] = "Restrictive",
+            ["FedBalanceSheet"] = "QT (Contracting)",
+            ["M2MoneySupply"] = "Contracting",
+            ["ReverseRepo"] = "High",
+            ["RealYield10Y"] = "High",
+            ["TreasuryYield10Y"] = "High",
+            ["TreasuryYield2Y"] = "High",
+            ["TreasuryYield3M"] = "High",
+            ["YieldCurveSpread"] = "Inverted",
+            ["YieldSpread10Y3M"] = "Inverted",
+            ["CPI"] = "Elevated",     // inflation still hot — bonds get no rescue
+            ["CorePCE"] = "Elevated",
+            ["GDP"] = "Slow",
+            ["UnemploymentRate"] = "Elevated",
+            ["JoblessClaims"] = "Elevated",
+            ["SahmRule"] = "Warning",
+            ["RetailSales"] = "Flat",
+            ["HousingStarts"] = "Falling",
+            ["ConsumerSentiment"] = "Pessimistic",
+            ["VIX"] = "Elevated",
+            ["HighYieldSpread"] = "Elevated",
+            ["DollarIndex"] = "Strong USD",
+            ["CryptoFearGreed"] = "Fear",
+        });
+
+        var names = playbook.Assets.Select(a => a.Name).ToList();
+        Assert.True(names.IndexOf("Gold") < names.IndexOf("Stocks"));
+        Assert.True(names.IndexOf("Gold") < names.IndexOf("Long-Term Bonds"));
+
+        var gold = playbook.Assets.Single(a => a.Name == "Gold");
+        Assert.Contains(gold.Reasons, r => r.Contains("hedge"));
+    }
+
+    [Fact]
+    public void Playbook_NoSignals_EverythingNeutralWithNoReasons()
+    {
+        var playbook = Playbook(new Dictionary<string, string>());
+
+        Assert.Equal(5, playbook.Assets.Count);
+        Assert.All(playbook.Assets, a =>
+        {
+            Assert.Equal("Neutral", a.Verdict);
+            Assert.Empty(a.Reasons); // mid-range drivers aren't worth a sentence
+        });
+        Assert.NotEmpty(playbook.Note);
+    }
+
+    [Fact]
+    public void Playbook_AssetsAlwaysRankedBestFirst()
+    {
+        var playbook = Playbook(AllWith("Panic"));
+
+        var scores = playbook.Assets.Select(a => a.Score).ToList();
+        Assert.Equal(scores.OrderByDescending(s => s), scores);
+        Assert.All(playbook.Assets, a => Assert.InRange(a.Score, 0, 100));
+    }
+
     // ── Narrative ─────────────────────────────────────────────────────────
 
     [Fact]

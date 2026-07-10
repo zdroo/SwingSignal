@@ -21,10 +21,22 @@ public record HealthGroupDto(
 /// dashboard, is NOT a prediction and plays no role in the odds engine.
 public record MarketHealthDto(int Score, string Label, List<HealthGroupDto> Groups);
 
+public record PlaybookAssetDto(
+    string Name,
+    int Score,            // 0–100 playbook fit for new money
+    string Verdict,       // Favored | Neutral | Headwinds
+    List<string> Reasons);
+
+/// Which asset classes current conditions favor for NEW money — a fixed,
+/// textbook playbook applied to today's readings. Descriptive, not advice,
+/// and separate from the odds engine.
+public record PlaybookDto(string Headline, string Note, List<PlaybookAssetDto> Assets);
+
 public record MacroRegimeDto(
     Dictionary<string, MacroIndicatorValueDto> Indicators,
     MarketHealthDto Health,
     List<string> Summary, // the rule-based plain-words narrative
+    PlaybookDto Playbook,
     DateTime AsOf);
 
 public record HistoricalMatchDto(

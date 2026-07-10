@@ -179,6 +179,178 @@ public static class RegimeInsight
         return new MarketHealthDto(overall, HealthLabel(overall), groups);
     }
 
+    // ── Playbook: which asset class do conditions favor for NEW money? ─────
+    // A fixed, textbook regime playbook: each class scores 0-100 from the
+    // health group scores (weights encode textbook macro relationships, e.g.
+    // liquidity drives risk assets, cooling inflation + weakening growth
+    // drive bonds), then sharp event signals adjust it. Every contribution
+    // carries a plain-words reason so the ranking is fully auditable.
+
+    public const string Favored = "Favored";
+    public const string NeutralFit = "Neutral";
+    public const string Headwinds = "Headwinds";
+
+    private sealed record Driver(double Weight, double Value, string Helps, string Hurts);
+
+    public static string VerdictOf(int score) => score switch
+    {
+        >= 65 => Favored,
+        >= 45 => NeutralFit,
+        _ => Headwinds,
+    };
+
+    public static PlaybookDto ComputePlaybook(
+        MarketHealthDto health, IReadOnlyDictionary<string, string> signals)
+    {
+        // A missing group counts as "nothing notable" — same convention as ToneScore
+        double Group(string name) =>
+            health.Groups.FirstOrDefault(g => g.Name == name)?.Score ?? 55;
+
+        var policy = Group("Policy & Liquidity");   // 100 = money cheap and flowing
+        var curve = Group("Rates & Yield Curve");    // 100 = healthy curve
+        var inflation = Group("Inflation");          // 100 = tame
+        var growth = Group("Growth & Labor");        // 100 = expanding
+        var stress = Group("Market Stress");         // 100 = calm
+
+        string? Sig(string key) => signals.TryGetValue(key, out var v) ? v : null;
+
+        var sahmTriggered = Sig("SahmRule") == "Recession Signal";
+        var inverted = Sig("YieldSpread10Y3M") == "Inverted" || Sig("YieldCurveSpread") == "Inverted";
+        var qe = Sig("FedBalanceSheet") == "QE (Expanding)";
+        var qt = Sig("FedBalanceSheet") == "QT (Contracting)";
+        var panic = Sig("VIX") == "Panic" || Sig("HighYieldSpread") == "Stressed";
+        var cryptoSentiment = Sig("CryptoFearGreed");
+
+        var ranked = new List<PlaybookAssetDto>();
+
+        void Add(string name, Driver[] drivers, params (double Delta, string? Reason)[] events)
+        {
+            var score = drivers.Sum(d => d.Weight * d.Value);
+            var reasons = new List<string>();
+
+            // Only drivers that are actually pulling get a reason — mid-range
+            // readings aren't worth a sentence
+            foreach (var d in drivers.OrderByDescending(d => d.Weight))
+            {
+                if (d.Value >= 65) reasons.Add(d.Helps);
+                else if (d.Value <= 35) reasons.Add(d.Hurts);
+            }
+
+            foreach (var (delta, reason) in events)
+            {
+                score += delta;
+                if (reason is not null) reasons.Add(reason);
+            }
+
+            var rounded = (int)Math.Round(Math.Clamp(score, 0, 100), MidpointRounding.AwayFromZero);
+            ranked.Add(new PlaybookAssetDto(name, rounded, VerdictOf(rounded), reasons));
+        }
+
+        Add("Stocks",
+        [
+            new(0.30, growth,
+                "the real economy is expanding — an earnings tailwind",
+                "growth and labor are deteriorating — an earnings risk"),
+            new(0.25, policy,
+                "money is cheap and flowing, which supports valuations",
+                "money is expensive and draining, which pressures valuations"),
+            new(0.25, stress,
+                "markets are calm, so risk-taking is being rewarded",
+                "markets are stressed, and risk assets get sold first"),
+            new(0.20, inflation,
+                "inflation is tame, so the Fed isn't forced to tighten",
+                "inflation is hot, which keeps policy tight"),
+        ],
+            (sahmTriggered ? -10 : 0, sahmTriggered
+                ? "the Sahm Rule has triggered — recessions are hostile to earnings" : null),
+            (qe ? 5 : qt ? -5 : 0, qe
+                ? "an expanding Fed balance sheet historically lifts equities"
+                : qt ? "a shrinking Fed balance sheet is a persistent drag on equities" : null),
+            (0, panic
+                ? "note: panic-level stress has historically marked better multi-month entries than exits" : null));
+
+        Add("Crypto (majors)",
+        [
+            new(0.40, policy,
+                "liquidity is expanding — historically crypto's strongest tailwind",
+                "liquidity is draining — historically crypto's strongest headwind"),
+            new(0.30, stress,
+                "risk appetite is healthy, which crypto amplifies",
+                "risk-off stress hits crypto hardest of all"),
+            new(0.15, growth,
+                "a growing economy supports speculative demand",
+                "a weakening economy drains speculative demand"),
+            new(0.15, inflation,
+                "tame inflation keeps real yields from crushing long-duration bets",
+                "hot inflation pressures all long-duration bets, crypto included"),
+        ],
+            (sahmTriggered ? -10 : 0, sahmTriggered
+                ? "a recession confirmation is hostile to speculative assets" : null),
+            (qe ? 8 : qt ? -8 : 0, qe
+                ? "fresh Fed liquidity historically reaches crypto first"
+                : qt ? "the Fed's liquidity drain hits crypto first" : null),
+            (cryptoSentiment == "Extreme Greed" ? -8 : cryptoSentiment == "Extreme Fear" ? 5 : 0,
+                cryptoSentiment == "Extreme Greed"
+                    ? "crowd euphoria (Extreme Greed) has historically preceded pullbacks"
+                    : cryptoSentiment == "Extreme Fear"
+                    ? "crowd capitulation (Extreme Fear) has historically been an entry, not an exit" : null));
+
+        Add("Gold",
+        [
+            new(0.40, 100 - stress,
+                "market stress is driving a flight to safety",
+                "calm markets leave gold without a safety bid"),
+            new(0.35, 100 - inflation,
+                "hot inflation strengthens the classic hedge case",
+                "tame inflation weakens the hedge case"),
+            new(0.25, policy,
+                "easy policy depresses real yields — gold's main fuel",
+                "tight policy props up real yields — gold's main drag"),
+        ]);
+
+        Add("Long-Term Bonds",
+        [
+            new(0.35, inflation,
+                "cooling inflation is the best backdrop for fixed coupons",
+                "hot inflation erodes fixed coupons"),
+            new(0.30, 100 - growth,
+                "a weakening economy pulls rate cuts closer, lifting bond prices",
+                "a strong economy keeps yields pinned high"),
+            new(0.20, 100 - stress,
+                "flight-to-quality flows favor Treasuries",
+                "risk appetite pulls money away from safe assets"),
+            new(0.15, policy,
+                "an easing Fed lifts bond prices",
+                "a tightening Fed pressures bond prices"),
+        ],
+            (sahmTriggered ? 10 : 0, sahmTriggered
+                ? "recessions historically bring rate cuts, the strongest driver of bond rallies" : null));
+
+        Add("Cash & T-Bills",
+        [
+            new(0.50, 100 - curve,
+                "the yield curve is strained — short-term bills out-yield most alternatives",
+                "a healthy yield curve means bills yield less than longer bonds"),
+            new(0.50, 100 - stress,
+                "in stressed markets cash preserves optionality for better entries",
+                "in calm markets cash lags every risk asset"),
+        ],
+            (inverted ? 10 : 0, inverted
+                ? "the curve is inverted — you are paid to wait in short-term bills" : null),
+            (sahmTriggered ? 5 : 0, sahmTriggered
+                ? "recession risk raises the value of staying liquid" : null));
+
+        // Stable sort: ties resolve in definition order
+        var ordered = ranked.OrderByDescending(a => a.Score).ToList();
+
+        return new PlaybookDto(
+            $"Current conditions favor {ordered[0].Name} for new money.",
+            "A fixed, textbook playbook applied to today's readings — the same rules every day. " +
+            "It describes what similar conditions have historically favored, not what will happen. " +
+            "Not financial advice, and it plays no role in the odds engine.",
+            ordered);
+    }
+
     // ── Narrative: a few plain-words sentences on the overall picture ──────
     public static List<string> Summarize(IReadOnlyDictionary<string, MacroIndicatorValueDto> indicators)
     {
