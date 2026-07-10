@@ -10,10 +10,13 @@ namespace SwingSignal.Api.Extensions;
 ///   auth               10/min  — login/refresh/token endpoints (brute-force)
 ///   register            5/hour — account creation (abusive signups)
 ///   public-sensitive   20/min  — endpoints that proxy third parties (Yahoo search)
-///   compute            10/min  — expensive analysis (backtests)
+///   compute            10/min  — expensive analysis (backtests, custom windows)
+///   odds               30/min  — asset odds; can trigger external ingestion for
+///                                new symbols. Invisible to a human clicking
+///                                through assets, stops scripted flooding.
 public static class RateLimitingExtensions
 {
-    private static readonly string[] PolicyNames = ["auth", "register", "public-sensitive", "compute"];
+    private static readonly string[] PolicyNames = ["auth", "register", "public-sensitive", "compute", "odds"];
 
     public static IServiceCollection AddAppRateLimiting(this IServiceCollection services, IWebHostEnvironment environment)
     {
@@ -46,6 +49,9 @@ public static class RateLimitingExtensions
 
             options.AddPolicy("compute", ctx =>
                 FixedWindowByIp(ctx, permitLimit: 10, window: TimeSpan.FromMinutes(1)));
+
+            options.AddPolicy("odds", ctx =>
+                FixedWindowByIp(ctx, permitLimit: 30, window: TimeSpan.FromMinutes(1)));
 
             options.OnRejected = async (ctx, ct) =>
             {

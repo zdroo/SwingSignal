@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SwingSignal.Api.Extensions;
 using SwingSignal.Application.Abstractions.Ingestion;
 using SwingSignal.Application.Analytics;
@@ -47,7 +48,9 @@ public class RegimeController : ControllerBase
         return Ok(await _regime.FindSimilarPeriodsAsync(topK, ct: ct));
     }
 
+    // Can trigger external ingestion for new symbols — capped per IP
     [HttpGet("odds/{symbol}")]
+    [EnableRateLimiting("odds")]
     public async Task<IActionResult> GetOdds(
         string symbol,
         [FromQuery] string? q = null,
@@ -72,7 +75,10 @@ public class RegimeController : ControllerBase
         return Ok(await _odds.GetOddsAsync(normalized, ct));
     }
 
+    // Re-runs the full analog computation per request — deliberate research
+    // action, not casual browsing, so it shares the strict compute budget
     [HttpGet("odds/{symbol}/period")]
+    [EnableRateLimiting("compute")]
     public async Task<IActionResult> GetOddsForPeriod(
         string symbol,
         [FromQuery] int days = 30,
