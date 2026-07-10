@@ -6,6 +6,7 @@ using SwingSignal.Application.MacroData;
 using SwingSignal.Application.Markets;
 using SwingSignal.Application.Odds;
 using SwingSignal.Application.Regime;
+using SwingSignal.Application.Watchlist;
 
 namespace SwingSignal.Application;
 
@@ -27,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ICandleQueryService, CandleQueryService>();
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<ISearchLogService, SearchLogService>();
+        services.AddScoped<IWatchlistService, WatchlistService>();
 
         return services;
     }

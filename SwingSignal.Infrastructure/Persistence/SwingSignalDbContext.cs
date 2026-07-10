@@ -13,6 +13,7 @@ public class SwingSignalDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<SearchLog> SearchLogs => Set<SearchLog>();
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
+    public DbSet<WatchlistItem> WatchlistItems => Set<WatchlistItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
