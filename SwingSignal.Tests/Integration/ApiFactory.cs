@@ -24,20 +24,30 @@ public class ApiFactory : WebApplicationFactory<Program>
     /// production today: off).
     protected virtual bool ProEnabled => false;
 
+    /// Override to configure a Stripe webhook secret (keys absent from
+    /// appsettings.json, so an in-memory override sticks here).
+    protected virtual string? StripeWebhookSecret => null;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["Jwt:Secret"] = "integration-test-secret-0123456789abcdefghijklmnop",
                 ["Jwt:Issuer"] = "SwingSignal",
                 ["Jwt:Audience"] = "SwingSignalWeb",
                 ["Google:ClientId"] = "integration-test-client-id",
                 ["Frontend:Url"] = "http://localhost:3000",
-            });
+            };
+            if (StripeWebhookSecret is not null)
+            {
+                settings["Stripe:SecretKey"] = "sk_test_integration";
+                settings["Stripe:WebhookSecret"] = StripeWebhookSecret;
+            }
+            config.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureServices(services =>
