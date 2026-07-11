@@ -105,8 +105,11 @@ public class BillingFlagOnTests : IClassFixture<ProEnabledApiFactory>
     }
 
     [Fact]
-    public async Task Portal_NoBillingProfile_400()
+    public async Task Portal_WhenBillingUnconfigured_400_NotAServerError()
     {
+        // The test host has no Stripe keys — the endpoint must fail politely
+        // (400), never crash (500). The full transition path is covered by
+        // StripeWebhookTests with real signed events.
         var token = await RegisterAsync();
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/billing/portal")
         {

@@ -97,7 +97,10 @@ public class StripeBillingService : IBillingService
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(payload, signature, _webhookSecret);
+            // Don't hard-fail on an API-version mismatch: we read only a few
+            // stable fields, so a dashboard version bump shouldn't drop events
+            stripeEvent = EventUtility.ConstructEvent(
+                payload, signature, _webhookSecret, throwOnApiVersionMismatch: false);
         }
         catch (StripeException)
         {
