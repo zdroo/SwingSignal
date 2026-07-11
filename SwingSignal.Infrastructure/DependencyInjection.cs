@@ -5,7 +5,9 @@ using SwingSignal.Application.Abstractions.Email;
 using SwingSignal.Application.Abstractions.Ingestion;
 using SwingSignal.Application.Abstractions.Persistence;
 using SwingSignal.Application.Abstractions.Security;
+using SwingSignal.Application.Abstractions.Billing;
 using SwingSignal.Infrastructure.BackgroundServices;
+using SwingSignal.Infrastructure.Billing;
 using SwingSignal.Infrastructure.Email;
 using SwingSignal.Infrastructure.ExternalClients;
 using SwingSignal.Infrastructure.Ingestion;
@@ -34,6 +36,9 @@ public static class DependencyInjection
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<IWatchlistRepository, WatchlistRepository>();
         services.AddScoped<IAlertStateRepository, AlertStateRepository>();
+
+        // Billing (Stripe) — endpoints reject politely while unconfigured
+        services.AddScoped<IBillingService, StripeBillingService>();
 
         // Security
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

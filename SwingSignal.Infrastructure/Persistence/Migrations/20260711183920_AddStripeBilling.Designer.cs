@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SwingSignal.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using SwingSignal.Infrastructure.Persistence;
 namespace SwingSignal.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(SwingSignalDbContext))]
-    partial class SwingSignalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711183920_AddStripeBilling")]
+    partial class AddStripeBilling
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

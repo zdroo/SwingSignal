@@ -20,7 +20,7 @@ public record WaitlistRequest(string Email, string? Source);
 
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
-public record UserProfileDto(string Email, string Plan, bool IsEmailConfirmed, DateTime CreatedAt, bool WeeklyReportEnabled, bool AlertsEnabled);
+public record UserProfileDto(string Email, string Plan, bool IsEmailConfirmed, DateTime CreatedAt, bool WeeklyReportEnabled, bool AlertsEnabled, bool HasBilling);
 
 public record AuthResponse(
     string AccessToken,

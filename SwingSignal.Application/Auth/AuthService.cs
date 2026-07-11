@@ -229,7 +229,10 @@ public class AuthService : IAuthService
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new NotFoundException("Account not found.");
 
-        return new UserProfileDto(user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt, user.WeeklyReportEnabled, user.AlertsEnabled);
+        return new UserProfileDto(
+            user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt,
+            user.WeeklyReportEnabled, user.AlertsEnabled,
+            HasBilling: user.StripeCustomerId is not null);
     }
 
     public async Task SetWeeklyReportAsync(Guid userId, bool enabled, CancellationToken ct = default)

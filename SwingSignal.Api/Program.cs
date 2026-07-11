@@ -25,6 +25,18 @@ if (builder.Environment.IsProduction())
         "Resend:ApiKey",
         "Frontend:Url",
     ];
+    // Turning Pro on without billing configured would show upgrade buttons
+    // that 500 on click — require the full Stripe set when the flag is live.
+    if (builder.Configuration.GetValue<bool>("Features:ProEnabled"))
+        required =
+        [
+            .. required,
+            "Stripe:SecretKey",
+            "Stripe:WebhookSecret",
+            "Stripe:MonthlyPriceId",
+            "Stripe:YearlyPriceId",
+        ];
+
     var missing = required
         .Where(key => string.IsNullOrWhiteSpace(builder.Configuration[key]))
         .ToList();

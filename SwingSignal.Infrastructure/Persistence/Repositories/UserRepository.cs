@@ -53,6 +53,9 @@ public class UserRepository : IUserRepository
             .Where(u => u.Plan == Domain.Enums.UserPlan.Pro && u.AlertsEnabled && u.IsEmailConfirmed)
             .ToListAsync(ct);
 
+    public Task<User?> GetByStripeSubscriptionIdAsync(string subscriptionId, CancellationToken ct = default) =>
+        _context.Users.FirstOrDefaultAsync(u => u.StripeSubscriptionId == subscriptionId, ct);
+
     public Task UpdateAsync(User user, CancellationToken ct = default) =>
         _context.SaveChangesAsync(ct);
 

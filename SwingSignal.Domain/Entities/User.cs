@@ -23,6 +23,11 @@ public class User : BaseEntity
 
     // Change alerts (Pro): watchlist stance flips + market health band moves
     public bool AlertsEnabled { get; set; } = true;
+
+    // Stripe billing linkage; the webhook is the source of truth for Plan.
+    // CustomerId survives cancellation so resubscribing reuses the profile.
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
     public DateTime? LastWeeklyReportAt { get; set; }
 
     // Password reset
