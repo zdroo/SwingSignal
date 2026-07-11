@@ -18,4 +18,5 @@ public interface IAuthService
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default);
     Task DeleteAccountAsync(Guid userId, CancellationToken ct = default);
     Task SetWeeklyReportAsync(Guid userId, bool enabled, CancellationToken ct = default);
+    Task SetAlertsAsync(Guid userId, bool enabled, CancellationToken ct = default);
 }

@@ -1,0 +1,150 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using SwingSignal.Application.Abstractions.Email;
+using SwingSignal.Application.Abstractions.Persistence;
+using SwingSignal.Application.Alerts;
+using SwingSignal.Application.Common;
+using SwingSignal.Application.Odds;
+using SwingSignal.Application.Regime;
+
+namespace SwingSignal.Infrastructure.BackgroundServices;
+
+// Evaluates alert conditions every few hours: the market-health band for
+// everyone, and the statistical-read stance for every symbol on any Pro
+// user's watchlist. Each user gets at most one digest email per run.
+// State lives in AlertStates, so a restart never re-fires old changes.
+public class AlertEvaluationService : BackgroundService
+{
+    private static readonly TimeSpan RunInterval = TimeSpan.FromHours(4);
+    // Give ingestion a head start after boot so we compare fresh data
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(20);
+
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<AlertEvaluationService> _logger;
+    private readonly string _frontendUrl;
+
+    public AlertEvaluationService(
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration,
+        ILogger<AlertEvaluationService> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+        _frontendUrl = configuration["Frontend:Url"] ?? "http://localhost:3000";
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var ct = stoppingToken;
+        try
+        {
+            await Task.Delay(StartupDelay, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await EvaluateAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Alert evaluation run failed");
+            }
+
+            await Task.Delay(RunInterval, ct);
+        }
+    }
+
+    private async Task EvaluateAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+
+        var recipients = await users.GetAlertRecipientsAsync(ct);
+        if (recipients.Count == 0) return;
+
+        var states = scope.ServiceProvider.GetRequiredService<IAlertStateRepository>();
+        var regime = scope.ServiceProvider.GetRequiredService<IMacroRegimeService>();
+        var watchlists = scope.ServiceProvider.GetRequiredService<IWatchlistRepository>();
+        var odds = scope.ServiceProvider.GetRequiredService<IHistoricalOddsService>();
+        var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+
+        var stored = await states.GetAllAsync(ct);
+        var perUser = recipients.ToDictionary(u => u.Id, _ => new List<AlertRules.Change>());
+
+        // Market health — one check, everyone subscribed
+        var current = await regime.GetCurrentRegimeAsync(ct);
+        var healthChange = AlertRules.HealthChange(stored.GetValueOrDefault(AlertRules.HealthKey), current.Health);
+        if (healthChange is not null)
+        {
+            await states.UpsertAsync(healthChange.Key, healthChange.NewValue, ct);
+            if (healthChange.Notify)
+                foreach (var changes in perUser.Values)
+                    changes.Add(healthChange);
+        }
+
+        // Watchlist stances — one odds computation per distinct symbol
+        var symbolSubscribers = new Dictionary<string, List<Guid>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var user in recipients)
+        {
+            foreach (var item in await watchlists.GetByUserAsync(user.Id, ct))
+            {
+                if (!symbolSubscribers.TryGetValue(item.Symbol, out var subs))
+                    symbolSubscribers[item.Symbol] = subs = [];
+                subs.Add(user.Id);
+            }
+        }
+
+        foreach (var (symbol, subscribers) in symbolSubscribers)
+        {
+            AlertRules.Change? change;
+            try
+            {
+                var assetOdds = await odds.GetOddsAsync(symbol, ct);
+                change = AlertRules.StanceChange(
+                    symbol, stored.GetValueOrDefault(AlertRules.StanceKey(symbol)), assetOdds.TradeRead);
+            }
+            catch (AppException)
+            {
+                continue; // one broken asset must not kill the whole run
+            }
+
+            if (change is null) continue;
+
+            await states.UpsertAsync(change.Key, change.NewValue, ct);
+            if (!change.Notify) continue;
+
+            foreach (var userId in subscribers)
+                perUser[userId].Add(change);
+        }
+
+        // One digest per user
+        var sent = 0;
+        foreach (var user in recipients)
+        {
+            var changes = perUser[user.Id];
+            if (changes.Count == 0) continue;
+
+            await email.SendAlertAsync(
+                user.Email,
+                AlertEmailBuilder.Subject(changes),
+                AlertEmailBuilder.BuildHtml(changes, _frontendUrl),
+                ct);
+            sent++;
+        }
+
+        if (sent > 0)
+            _logger.LogInformation("Alert digests sent to {Count} user(s)", sent);
+    }
+}

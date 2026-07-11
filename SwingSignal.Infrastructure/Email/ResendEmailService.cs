@@ -61,6 +61,9 @@ public class ResendEmailService : IEmailService
     public Task SendWeeklyReportAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default) =>
         SendAsync(toEmail, subject, bodyHtml, ct);
 
+    public Task SendAlertAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default) =>
+        SendAsync(toEmail, subject, bodyHtml, ct);
+
     // ── Helpers ───────────────────────────────────────────────
 
     private async Task SendAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct)

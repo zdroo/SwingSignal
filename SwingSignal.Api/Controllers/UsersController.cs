@@ -37,6 +37,15 @@ public class UsersController : ControllerBase
         return Ok(new { message = request.Enabled ? "Weekly report enabled." : "Weekly report disabled." });
     }
 
+    public record AlertsRequest(bool Enabled);
+
+    [HttpPut("me/alerts")]
+    public async Task<IActionResult> SetAlerts([FromBody] AlertsRequest request, CancellationToken ct)
+    {
+        await _auth.SetAlertsAsync(User.RequireUserId(), request.Enabled, ct);
+        return Ok(new { message = request.Enabled ? "Alerts enabled." : "Alerts disabled." });
+    }
+
     [HttpDelete("me")]
     public async Task<IActionResult> DeleteAccount(CancellationToken ct)
     {

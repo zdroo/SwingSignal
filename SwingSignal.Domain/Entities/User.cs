@@ -20,6 +20,9 @@ public class User : BaseEntity
 
     // Weekly regime report (Pro): idempotency + opt-out
     public bool WeeklyReportEnabled { get; set; } = true;
+
+    // Change alerts (Pro): watchlist stance flips + market health band moves
+    public bool AlertsEnabled { get; set; } = true;
     public DateTime? LastWeeklyReportAt { get; set; }
 
     // Password reset

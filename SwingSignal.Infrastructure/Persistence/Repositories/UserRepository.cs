@@ -46,6 +46,11 @@ public class UserRepository : IUserRepository
                 && (u.LastWeeklyReportAt == null || u.LastWeeklyReportAt < notSentSince))
             .ToListAsync(ct);
 
+    public Task<List<User>> GetAlertRecipientsAsync(CancellationToken ct = default) =>
+        _context.Users
+            .Where(u => u.Plan == Domain.Enums.UserPlan.Pro && u.AlertsEnabled)
+            .ToListAsync(ct);
+
     public Task UpdateAsync(User user, CancellationToken ct = default) =>
         _context.SaveChangesAsync(ct);
 

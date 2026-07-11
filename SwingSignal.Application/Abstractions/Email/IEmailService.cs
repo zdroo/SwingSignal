@@ -8,4 +8,5 @@ public interface IEmailService
     Task SendEmailConfirmationAsync(string toEmail, string confirmUrl, CancellationToken ct = default);
     Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken ct = default);
     Task SendWeeklyReportAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default);
+    Task SendAlertAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default);
 }

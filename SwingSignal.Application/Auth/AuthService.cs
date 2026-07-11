@@ -229,7 +229,7 @@ public class AuthService : IAuthService
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new NotFoundException("Account not found.");
 
-        return new UserProfileDto(user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt, user.WeeklyReportEnabled);
+        return new UserProfileDto(user.Email, user.Plan.ToString(), user.IsEmailConfirmed, user.CreatedAt, user.WeeklyReportEnabled, user.AlertsEnabled);
     }
 
     public async Task SetWeeklyReportAsync(Guid userId, bool enabled, CancellationToken ct = default)
@@ -238,6 +238,15 @@ public class AuthService : IAuthService
             ?? throw new NotFoundException("Account not found.");
 
         user.WeeklyReportEnabled = enabled;
+        await _users.UpdateAsync(user, ct);
+    }
+
+    public async Task SetAlertsAsync(Guid userId, bool enabled, CancellationToken ct = default)
+    {
+        var user = await _users.GetByIdAsync(userId, ct)
+            ?? throw new NotFoundException("Account not found.");
+
+        user.AlertsEnabled = enabled;
         await _users.UpdateAsync(user, ct);
     }
 

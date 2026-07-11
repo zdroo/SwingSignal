@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<IWatchlistRepository, WatchlistRepository>();
+        services.AddScoped<IAlertStateRepository, AlertStateRepository>();
 
         // Security
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
@@ -73,6 +74,7 @@ public static class DependencyInjection
             services.AddHostedService<MarketIndicatorIngestionService>();
             services.AddHostedService<UnconfirmedAccountCleanupService>();
             services.AddHostedService<WeeklyReportService>();
+            services.AddHostedService<AlertEvaluationService>();
         }
 
         return services;

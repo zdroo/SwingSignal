@@ -14,6 +14,7 @@ public class SwingSignalDbContext : DbContext
     public DbSet<SearchLog> SearchLogs => Set<SearchLog>();
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
     public DbSet<WatchlistItem> WatchlistItems => Set<WatchlistItem>();
+    public DbSet<AlertState> AlertStates => Set<AlertState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
