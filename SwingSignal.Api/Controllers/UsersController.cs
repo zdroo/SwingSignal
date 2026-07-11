@@ -28,6 +28,15 @@ public class UsersController : ControllerBase
         return Ok(new { message = "Password updated. Other sessions have been signed out." });
     }
 
+    public record WeeklyReportRequest(bool Enabled);
+
+    [HttpPut("me/weekly-report")]
+    public async Task<IActionResult> SetWeeklyReport([FromBody] WeeklyReportRequest request, CancellationToken ct)
+    {
+        await _auth.SetWeeklyReportAsync(User.RequireUserId(), request.Enabled, ct);
+        return Ok(new { message = request.Enabled ? "Weekly report enabled." : "Weekly report disabled." });
+    }
+
     [HttpDelete("me")]
     public async Task<IActionResult> DeleteAccount(CancellationToken ct)
     {

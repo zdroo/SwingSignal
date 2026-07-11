@@ -18,6 +18,10 @@ public class User : BaseEntity
     public DateTime? LastConfirmationEmailAt { get; set; }
     public int ConfirmationEmailCount { get; set; }
 
+    // Weekly regime report (Pro): idempotency + opt-out
+    public bool WeeklyReportEnabled { get; set; } = true;
+    public DateTime? LastWeeklyReportAt { get; set; }
+
     // Password reset
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }

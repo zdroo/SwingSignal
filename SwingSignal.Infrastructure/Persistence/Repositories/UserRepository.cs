@@ -39,6 +39,13 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync(ct);
     }
 
+    public Task<List<User>> GetWeeklyReportRecipientsAsync(DateTime notSentSince, CancellationToken ct = default) =>
+        _context.Users
+            .Where(u => u.Plan == Domain.Enums.UserPlan.Pro
+                && u.WeeklyReportEnabled
+                && (u.LastWeeklyReportAt == null || u.LastWeeklyReportAt < notSentSince))
+            .ToListAsync(ct);
+
     public Task UpdateAsync(User user, CancellationToken ct = default) =>
         _context.SaveChangesAsync(ct);
 

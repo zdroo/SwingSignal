@@ -57,6 +57,10 @@ public class ResendEmailService : IEmailService
         await SendAsync(toEmail, "Reset your password – SwingSignal", body, ct);
     }
 
+    // Body comes fully built (WeeklyReportBuilder) — this only wraps and sends
+    public Task SendWeeklyReportAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default) =>
+        SendAsync(toEmail, subject, bodyHtml, ct);
+
     // ── Helpers ───────────────────────────────────────────────
 
     private async Task SendAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct)

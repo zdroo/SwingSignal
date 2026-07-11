@@ -17,4 +17,5 @@ public interface IAuthService
     Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default);
     Task DeleteAccountAsync(Guid userId, CancellationToken ct = default);
+    Task SetWeeklyReportAsync(Guid userId, bool enabled, CancellationToken ct = default);
 }

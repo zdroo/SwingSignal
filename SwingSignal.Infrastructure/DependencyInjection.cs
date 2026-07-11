@@ -72,6 +72,7 @@ public static class DependencyInjection
             services.AddHostedService<StockForexIngestionService>();
             services.AddHostedService<MarketIndicatorIngestionService>();
             services.AddHostedService<UnconfirmedAccountCleanupService>();
+            services.AddHostedService<WeeklyReportService>();
         }
 
         return services;
