@@ -68,6 +68,13 @@ public class WeeklyReportService : BackgroundService
 
         // One regime computation serves every recipient
         var regime = await regimeService.GetCurrentRegimeAsync(ct);
+        if (regime.Health.Groups.Count == 0)
+        {
+            // Ingestion outage — a "Market Health 0" email would be nonsense.
+            // Recipients stay unmarked, so a later pass this Monday retries.
+            _logger.LogWarning("Weekly report skipped: regime has no indicator data");
+            return;
+        }
         var subject = WeeklyReportBuilder.Subject(regime);
 
         foreach (var user in recipients)

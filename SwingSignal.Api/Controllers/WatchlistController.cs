@@ -12,7 +12,6 @@ namespace SwingSignal.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Policy = "ProOnly")]
-[EnableRateLimiting("compute")]
 public class WatchlistController : ControllerBase
 {
     private readonly IWatchlistService _watchlist;
@@ -26,10 +25,13 @@ public class WatchlistController : ControllerBase
     /// The list with each asset's current statistical picture — one odds
     /// computation per row, hence the compute rate limit.
     [HttpGet("overview")]
+    [EnableRateLimiting("compute")]
     public async Task<IActionResult> Overview(CancellationToken ct) =>
         Ok(await _watchlist.GetOverviewAsync(User.RequireUserId(), ct));
 
+    // Can trigger external ingestion for new symbols — same cap as the odds endpoint
     [HttpPost]
+    [EnableRateLimiting("odds")]
     public async Task<IActionResult> Add([FromBody] AddWatchlistRequest request, CancellationToken ct) =>
         Ok(await _watchlist.AddAsync(User.RequireUserId(), request.Symbol, ct));
 

@@ -20,6 +20,10 @@ public class AlertEvaluationService : BackgroundService
     private static readonly TimeSpan RunInterval = TimeSpan.FromHours(4);
     // Give ingestion a head start after boot so we compare fresh data
     private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(20);
+    // Hysteresis: a state must have held for most of a day before its flip
+    // is news — a value flapping at a threshold updates silently until it
+    // stabilizes, instead of emailing on every oscillation
+    private static readonly TimeSpan MinStableAge = TimeSpan.FromHours(20);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AlertEvaluationService> _logger;
@@ -80,16 +84,22 @@ public class AlertEvaluationService : BackgroundService
         var odds = scope.ServiceProvider.GetRequiredService<IHistoricalOddsService>();
         var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
-        var stored = await states.GetAllAsync(ct);
+        var stored = (await states.GetAllAsync(ct)).ToDictionary(a => a.Key);
         var perUser = recipients.ToDictionary(u => u.Id, _ => new List<AlertRules.Change>());
+
+        string? PreviousValue(string key) =>
+            stored.TryGetValue(key, out var s) ? s.Value : null;
+        bool PreviousIsStable(string key) =>
+            stored.TryGetValue(key, out var s) && s.UpdatedAt <= DateTime.UtcNow - MinStableAge;
 
         // Market health — one check, everyone subscribed
         var current = await regime.GetCurrentRegimeAsync(ct);
-        var healthChange = AlertRules.HealthChange(stored.GetValueOrDefault(AlertRules.HealthKey), current.Health);
+        var healthChange = AlertRules.HealthChange(PreviousValue(AlertRules.HealthKey), current.Health);
         if (healthChange is not null)
         {
+            var notify = healthChange.Notify && PreviousIsStable(healthChange.Key);
             await states.UpsertAsync(healthChange.Key, healthChange.NewValue, ct);
-            if (healthChange.Notify)
+            if (notify)
                 foreach (var changes in perUser.Values)
                     changes.Add(healthChange);
         }
@@ -113,7 +123,7 @@ public class AlertEvaluationService : BackgroundService
             {
                 var assetOdds = await odds.GetOddsAsync(symbol, ct);
                 change = AlertRules.StanceChange(
-                    symbol, stored.GetValueOrDefault(AlertRules.StanceKey(symbol)), assetOdds.TradeRead);
+                    symbol, PreviousValue(AlertRules.StanceKey(symbol)), assetOdds.TradeRead);
             }
             catch (AppException)
             {
@@ -122,8 +132,9 @@ public class AlertEvaluationService : BackgroundService
 
             if (change is null) continue;
 
+            var notifySubscribers = change.Notify && PreviousIsStable(change.Key);
             await states.UpsertAsync(change.Key, change.NewValue, ct);
-            if (!change.Notify) continue;
+            if (!notifySubscribers) continue;
 
             foreach (var userId in subscribers)
                 perUser[userId].Add(change);

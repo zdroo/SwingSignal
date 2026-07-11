@@ -10,10 +10,10 @@ public class AlertStateRepository : IAlertStateRepository
 
     public AlertStateRepository(SwingSignalDbContext context) => _context = context;
 
-    public Task<Dictionary<string, string>> GetAllAsync(CancellationToken ct = default) =>
+    public Task<List<AlertState>> GetAllAsync(CancellationToken ct = default) =>
         _context.AlertStates
             .AsNoTracking()
-            .ToDictionaryAsync(a => a.Key, a => a.Value, ct);
+            .ToListAsync(ct);
 
     public async Task UpsertAsync(string key, string value, CancellationToken ct = default)
     {
