@@ -21,8 +21,8 @@ jobs:
       # TreatWarningsAsErrors + AnalysisLevel latest-recommended are enforced
       # via Directory.Build.props, so a warning-free build is part of the gate
       - name: Build
-        run: dotnet build SwingSignal.slnx --configuration Release
+        run: dotnet build RegimeDeck.slnx --configuration Release
 
       # Unit tests are self-contained (mocked persistence — no SQL Server needed)
       - name: Test
-        run: dotnet test SwingSignal.Tests/SwingSignal.Tests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
+        run: dotnet test RegimeDeck.Tests/RegimeDeck.Tests.csproj --configuration Release --no-build --logger "console;verbosity=normal"

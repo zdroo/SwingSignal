@@ -1,0 +1,33 @@
+using Microsoft.EntityFrameworkCore;
+using RegimeDeck.Application.Abstractions.Persistence;
+using RegimeDeck.Domain.Entities;
+
+namespace RegimeDeck.Infrastructure.Persistence.Repositories;
+
+public class AssetRepository : IAssetRepository
+{
+    private readonly RegimeDeckDbContext _context;
+
+    public AssetRepository(RegimeDeckDbContext context) => _context = context;
+
+    public Task<List<Asset>> GetAllActiveAsync(CancellationToken ct = default) =>
+        _context.Assets.Where(a => a.IsActive).OrderBy(a => a.Symbol).ToListAsync(ct);
+
+    public Task<Asset?> GetBySymbolAsync(string symbol, CancellationToken ct = default)
+    {
+        var upper = symbol.ToUpperInvariant();
+        return _context.Assets.FirstOrDefaultAsync(a => a.Symbol == upper, ct);
+    }
+
+    public Task<bool> ExistsAsync(string symbol, CancellationToken ct = default)
+    {
+        var upper = symbol.ToUpperInvariant();
+        return _context.Assets.AnyAsync(a => a.Symbol == upper, ct);
+    }
+
+    public async Task AddAsync(Asset asset, CancellationToken ct = default)
+    {
+        _context.Assets.Add(asset);
+        await _context.SaveChangesAsync(ct);
+    }
+}

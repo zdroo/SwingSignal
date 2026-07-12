@@ -1,4 +1,4 @@
-# How SwingSignal Computes Odds — Crypto (BTC, ETH, USDT pairs)
+# How RegimeDeck Computes Odds — Crypto (BTC, ETH, USDT pairs)
 
 This document traces a crypto prediction from the HTTP request to the numbers
 on the asset page, at full detail. The pipeline shares its skeleton with the
