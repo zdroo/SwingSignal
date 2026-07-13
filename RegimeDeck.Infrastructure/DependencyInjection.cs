@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IWatchlistRepository, WatchlistRepository>();
         services.AddScoped<IAlertStateRepository, AlertStateRepository>();
         services.AddScoped<IScreenerRepository, ScreenerRepository>();
+        services.AddScoped<ISectorRotationRepository, SectorRotationRepository>();
 
         // Billing (Stripe) — endpoints reject politely while unconfigured
         services.AddScoped<IBillingService, StripeBillingService>();
@@ -82,6 +83,7 @@ public static class DependencyInjection
             services.AddHostedService<WeeklyReportService>();
             services.AddHostedService<AlertEvaluationService>();
             services.AddHostedService<ScreenerComputeService>();
+            services.AddHostedService<SectorRotationComputeService>();
         }
 
         return services;

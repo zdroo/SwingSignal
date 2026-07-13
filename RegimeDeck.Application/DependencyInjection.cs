@@ -7,6 +7,7 @@ using RegimeDeck.Application.Markets;
 using RegimeDeck.Application.Odds;
 using RegimeDeck.Application.Regime;
 using RegimeDeck.Application.Screener;
+using RegimeDeck.Application.Sectors;
 using RegimeDeck.Application.Watchlist;
 
 namespace RegimeDeck.Application;
@@ -31,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<ISearchLogService, SearchLogService>();
         services.AddScoped<IWatchlistService, WatchlistService>();
         services.AddScoped<IScreenerService, ScreenerService>();
+        services.AddScoped<ISectorRotationService, SectorRotationService>();
 
         return services;
     }
