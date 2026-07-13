@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>57b9725f-49e9-4986-9431-95b2bda9f961</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.21" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.21" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.13">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.21" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RegimeDeck.Application\RegimeDeck.Application.csproj" />
+    <ProjectReference Include="..\RegimeDeck.Infrastructure\RegimeDeck.Infrastructure.csproj" />
+    <ProjectReference Include="..\RegimeDeck.Contracts\RegimeDeck.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

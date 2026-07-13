@@ -1,4 +1,4 @@
-# How SwingSignal Computes Odds — Stocks, ETFs, Forex & Commodities
+# How RegimeDeck Computes Odds — Stocks, ETFs, Forex & Commodities
 
 This document traces a prediction from the HTTP request to the numbers on the
 asset page, at full detail, for every non-crypto asset (stocks, ETFs, indices,

@@ -1,4 +1,4 @@
-# Root editorconfig for the SwingSignal backend — codifies the existing style.
+# Root editorconfig for the RegimeDeck backend — codifies the existing style.
 root = true
 
 [*]
@@ -51,6 +51,6 @@ dotnet_analyzer_diagnostic.severity = none
 
 # Test naming follows the xUnit Method_Scenario_Expectation convention;
 # inline expected-value arrays in asserts are clearer than hoisted fields
-[SwingSignal.Tests/**.cs]
+[RegimeDeck.Tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1861.severity = none
