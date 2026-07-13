@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RegimeDeck.Application.Abstractions.Ingestion;
 using RegimeDeck.Application.Abstractions.Persistence;
@@ -12,55 +11,20 @@ namespace RegimeDeck.Infrastructure.BackgroundServices;
 // Precomputes the sector board every few hours: the odds engine gives each
 // sector ETF its regime fit, and its candles vs the benchmark's give relative
 // strength. Self-contained — it does not touch the screener's cache or
-// universe, only the shared odds/candle services. Mirrors the other compute
-// services' resilience (per-sector failures are swallowed).
-public class SectorRotationComputeService : BackgroundService
+// universe, only the shared odds/candle services. Per-sector failures are
+// swallowed so one bad sector can't stall the board.
+public class SectorRotationComputeService : PeriodicBackgroundService
 {
-    private static readonly TimeSpan RunInterval = TimeSpan.FromHours(6);
-    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(12);
-
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<SectorRotationComputeService> _logger;
 
     public SectorRotationComputeService(
         IServiceScopeFactory scopeFactory, ILogger<SectorRotationComputeService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-    }
+        : base(logger) => _scopeFactory = scopeFactory;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var ct = stoppingToken;
-        try
-        {
-            await Task.Delay(StartupDelay, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+    protected override TimeSpan Interval => TimeSpan.FromHours(6);
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(12);
 
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                await ComputeAsync(ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Sector rotation compute run failed");
-            }
-
-            await Task.Delay(RunInterval, ct);
-        }
-    }
-
-    private async Task ComputeAsync(CancellationToken ct)
+    protected override async Task RunOnceAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var ingestion = scope.ServiceProvider.GetRequiredService<IAssetIngestionService>();
@@ -98,7 +62,7 @@ public class SectorRotationComputeService : BackgroundService
         }
 
         if (computed > 0)
-            _logger.LogInformation("Sector rotation recomputed {Count} of {Total} sectors",
+            Logger.LogInformation("Sector rotation recomputed {Count} of {Total} sectors",
                 computed, SectorUniverse.Sectors.Count);
     }
 }

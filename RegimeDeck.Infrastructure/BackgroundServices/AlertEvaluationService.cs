@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RegimeDeck.Application.Abstractions.Email;
 using RegimeDeck.Application.Abstractions.Persistence;
@@ -15,60 +14,31 @@ namespace RegimeDeck.Infrastructure.BackgroundServices;
 // everyone, and the statistical-read stance for every symbol on any Pro
 // user's watchlist. Each user gets at most one digest email per run.
 // State lives in AlertStates, so a restart never re-fires old changes.
-public class AlertEvaluationService : BackgroundService
+public class AlertEvaluationService : PeriodicBackgroundService
 {
-    private static readonly TimeSpan RunInterval = TimeSpan.FromHours(4);
-    // Give ingestion a head start after boot so we compare fresh data
-    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(20);
     // Hysteresis: a state must have held for most of a day before its flip
     // is news — a value flapping at a threshold updates silently until it
     // stabilizes, instead of emailing on every oscillation
     private static readonly TimeSpan MinStableAge = TimeSpan.FromHours(20);
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<AlertEvaluationService> _logger;
     private readonly string _frontendUrl;
 
     public AlertEvaluationService(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
         ILogger<AlertEvaluationService> logger)
+        : base(logger)
     {
         _scopeFactory = scopeFactory;
-        _logger = logger;
         _frontendUrl = configuration["Frontend:Url"] ?? "http://localhost:3000";
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var ct = stoppingToken;
-        try
-        {
-            await Task.Delay(StartupDelay, ct);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+    protected override TimeSpan Interval => TimeSpan.FromHours(4);
+    // Give ingestion a head start after boot so we compare fresh data
+    protected override TimeSpan StartupDelay => TimeSpan.FromMinutes(20);
 
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                await EvaluateAsync(ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Alert evaluation run failed");
-            }
-
-            await Task.Delay(RunInterval, ct);
-        }
-    }
+    protected override Task RunOnceAsync(CancellationToken ct) => EvaluateAsync(ct);
 
     private async Task EvaluateAsync(CancellationToken ct)
     {
@@ -156,6 +126,6 @@ public class AlertEvaluationService : BackgroundService
         }
 
         if (sent > 0)
-            _logger.LogInformation("Alert digests sent to {Count} user(s)", sent);
+            Logger.LogInformation("Alert digests sent to {Count} user(s)", sent);
     }
 }

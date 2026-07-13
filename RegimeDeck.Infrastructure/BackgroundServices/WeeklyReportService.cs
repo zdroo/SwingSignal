@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RegimeDeck.Application.Abstractions.Email;
 using RegimeDeck.Application.Abstractions.Persistence;
@@ -13,45 +12,29 @@ namespace RegimeDeck.Infrastructure.BackgroundServices;
 // Sends the Pro weekly regime report on Mondays (UTC). The recipient query
 // plus LastWeeklyReportAt makes each hourly pass idempotent — a restart
 // mid-Monday resumes where it left off instead of double-sending.
-public class WeeklyReportService : BackgroundService
+public class WeeklyReportService : PeriodicBackgroundService
 {
-    private static readonly TimeSpan RunInterval = TimeSpan.FromHours(1);
-
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<WeeklyReportService> _logger;
     private readonly string _frontendUrl;
 
     public WeeklyReportService(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
         ILogger<WeeklyReportService> logger)
+        : base(logger)
     {
         _scopeFactory = scopeFactory;
-        _logger = logger;
         _frontendUrl = configuration["Frontend:Url"] ?? "http://localhost:3000";
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var ct = stoppingToken;
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                if (DateTime.UtcNow.DayOfWeek == DayOfWeek.Monday)
-                    await SendDueReportsAsync(ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Weekly report run failed");
-            }
+    // Hourly so a Monday is never missed; the day check + idempotency below
+    // keep it to one send per user per week.
+    protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
-            await Task.Delay(RunInterval, ct);
-        }
+    protected override async Task RunOnceAsync(CancellationToken ct)
+    {
+        if (DateTime.UtcNow.DayOfWeek == DayOfWeek.Monday)
+            await SendDueReportsAsync(ct);
     }
 
     private async Task SendDueReportsAsync(CancellationToken ct)
@@ -72,7 +55,7 @@ public class WeeklyReportService : BackgroundService
         {
             // Ingestion outage — a "Market Health 0" email would be nonsense.
             // Recipients stay unmarked, so a later pass this Monday retries.
-            _logger.LogWarning("Weekly report skipped: regime has no indicator data");
+            Logger.LogWarning("Weekly report skipped: regime has no indicator data");
             return;
         }
         var subject = WeeklyReportBuilder.Subject(regime);
@@ -90,6 +73,6 @@ public class WeeklyReportService : BackgroundService
             await users.UpdateAsync(user, ct);
         }
 
-        _logger.LogInformation("Weekly report sent to {Count} Pro user(s)", recipients.Count);
+        Logger.LogInformation("Weekly report sent to {Count} Pro user(s)", recipients.Count);
     }
 }

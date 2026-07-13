@@ -1,3 +1,4 @@
+using RegimeDeck.Application.Common;
 using RegimeDeck.Domain.Entities;
 using RegimeDeck.Domain.Enums;
 
@@ -32,12 +33,6 @@ public static class ScreenerProjection
                 result = result.Where(r => r.Edge3M is double edge && edge >= minEdge);
         }
 
-        // Rank: biggest regime edge first; rows without a computable read sink
-        // to the bottom; symbol breaks ties for a stable order.
-        return result
-            .OrderByDescending(r => r.Edge3M.HasValue)
-            .ThenByDescending(r => r.Edge3M ?? double.MinValue)
-            .ThenBy(r => r.Symbol, StringComparer.Ordinal)
-            .ToList();
+        return result.ByEdgeDescending(r => r.Edge3M, r => r.Symbol).ToList();
     }
 }

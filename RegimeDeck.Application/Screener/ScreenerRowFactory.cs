@@ -1,17 +1,16 @@
+using RegimeDeck.Application.Odds;
 using RegimeDeck.Contracts.Regime;
 using RegimeDeck.Domain.Entities;
 
 namespace RegimeDeck.Application.Screener;
 
 /// Maps a computed AssetOddsDto onto a cacheable ScreenerRow. Pure so the
-/// mapping (including the "no computable odds" case) is unit-tested without
-/// the DB or the timer.
+/// mapping is unit-tested without the DB or the timer.
 public static class ScreenerRowFactory
 {
     public static ScreenerRow Create(Asset asset, AssetOddsDto odds, DateTime computedAt)
     {
-        var threeMonths = odds.ThreeMonths;
-        var hasOdds = threeMonths.TotalCases > 0;
+        var summary = ThreeMonthSummary.From(odds);
 
         return new ScreenerRow
         {
@@ -19,11 +18,11 @@ public static class ScreenerRowFactory
             Name = asset.Name,
             MarketType = asset.MarketType,
             CurrentPrice = odds.CurrentPrice,
-            Odds3M = hasOdds ? threeMonths.PositiveOdds : null,
-            BaseRate3M = hasOdds ? threeMonths.BaseRate : null,
-            Edge3M = hasOdds ? threeMonths.Edge : null,
-            Stance = odds.TradeRead?.Stance,
-            Strength = odds.TradeRead?.Strength,
+            Odds3M = summary.Odds3M,
+            BaseRate3M = summary.BaseRate3M,
+            Edge3M = summary.Edge3M,
+            Stance = summary.Stance,
+            Strength = summary.Strength,
             ComputedAt = computedAt,
         };
     }

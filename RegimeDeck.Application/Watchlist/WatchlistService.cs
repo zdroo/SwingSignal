@@ -88,16 +88,15 @@ public class WatchlistService : IWatchlistService
         try
         {
             var odds = await _odds.GetOddsAsync(item.Symbol, ct);
-            var threeMonths = odds.ThreeMonths;
-            var hasOdds = threeMonths.TotalCases > 0;
+            var summary = ThreeMonthSummary.From(odds);
 
             return new WatchlistRowDto(
                 item.Symbol,
                 item.Name,
                 odds.CurrentPrice,
-                hasOdds ? threeMonths.PositiveOdds : null,
-                hasOdds ? threeMonths.BaseRate : null,
-                hasOdds ? threeMonths.Edge : null,
+                summary.Odds3M,
+                summary.BaseRate3M,
+                summary.Edge3M,
                 odds.TradeRead,
                 item.CreatedAt);
         }

@@ -1,4 +1,5 @@
 using RegimeDeck.Application.Abstractions.Persistence;
+using RegimeDeck.Application.Common;
 using RegimeDeck.Contracts.Sectors;
 using RegimeDeck.Domain.Entities;
 
@@ -17,9 +18,7 @@ public class SectorRotationService : ISectorRotationService
         var rows = await _repository.GetAllAsync(ct);
 
         var ranked = rows
-            .OrderByDescending(r => r.Edge3M.HasValue)
-            .ThenByDescending(r => r.Edge3M ?? double.MinValue)
-            .ThenBy(r => r.Sector, StringComparer.Ordinal)
+            .ByEdgeDescending(r => r.Edge3M, r => r.Sector)
             .Select(Map)
             .ToList();
 
