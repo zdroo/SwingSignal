@@ -6,6 +6,7 @@ using RegimeDeck.Application.MacroData;
 using RegimeDeck.Application.Markets;
 using RegimeDeck.Application.Odds;
 using RegimeDeck.Application.Regime;
+using RegimeDeck.Application.Screener;
 using RegimeDeck.Application.Watchlist;
 
 namespace RegimeDeck.Application;
@@ -29,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<ISearchLogService, SearchLogService>();
         services.AddScoped<IWatchlistService, WatchlistService>();
+        services.AddScoped<IScreenerService, ScreenerService>();
 
         return services;
     }
