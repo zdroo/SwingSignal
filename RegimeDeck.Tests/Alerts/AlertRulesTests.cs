@@ -83,6 +83,113 @@ public class AlertRulesTests
         // A data gap keeps the old state instead of firing a phantom change
         Assert.Null(AlertRules.StanceChange("SPY", "Long bias", read: null));
     }
+
+    // ── Edge turned positive ──────────────────────────────────────────────
+
+    [Fact]
+    public void EdgeChange_FirstEvaluation_RecordsWithoutNotifying()
+    {
+        var change = AlertRules.EdgeChange("SPY", previous: null, edge: 6.0);
+
+        Assert.NotNull(change);
+        Assert.False(change.Notify);
+        Assert.Equal("up", change.NewValue);
+    }
+
+    [Fact]
+    public void EdgeChange_FlatToPositive_Notifies()
+    {
+        var change = AlertRules.EdgeChange("SPY", previous: "flat", edge: 5.5);
+
+        Assert.NotNull(change);
+        Assert.True(change.Notify);
+        Assert.Contains("edge turned positive", change.Title);
+        Assert.Contains("+5.5pp", change.Title);
+    }
+
+    [Fact]
+    public void EdgeChange_PositiveToFlat_RecordsWithoutNotifying()
+    {
+        // The downturn updates state silently so the next upturn can fire again
+        var change = AlertRules.EdgeChange("SPY", previous: "up", edge: 1.0);
+
+        Assert.NotNull(change);
+        Assert.False(change.Notify);
+        Assert.Equal("flat", change.NewValue);
+    }
+
+    [Fact]
+    public void EdgeChange_BelowThreshold_IsFlat_NoChangeFromFlat()
+    {
+        // +2pp is positive but below the meaningful threshold → still "flat"
+        Assert.Null(AlertRules.EdgeChange("SPY", previous: "flat", edge: 2.0));
+    }
+
+    [Fact]
+    public void EdgeChange_NullEdge_Null()
+    {
+        Assert.Null(AlertRules.EdgeChange("SPY", previous: "flat", edge: null));
+    }
+
+    // ── Price-zone breakouts ──────────────────────────────────────────────
+
+    [Fact]
+    public void PriceZoneChange_FirstEvaluation_RecordsWithoutNotifying()
+    {
+        var change = AlertRules.PriceZoneChange("SPY", previous: null,
+            price: 120m, conservative: 90m, optimistic: 110m);
+
+        Assert.NotNull(change);
+        Assert.False(change.Notify);
+        Assert.Equal("above", change.NewValue);
+    }
+
+    [Fact]
+    public void PriceZoneChange_IntoOptimistic_Notifies()
+    {
+        var change = AlertRules.PriceZoneChange("SPY", previous: "mid",
+            price: 111m, conservative: 90m, optimistic: 110m);
+
+        Assert.NotNull(change);
+        Assert.True(change.Notify);
+        Assert.Contains("above its optimistic", change.Title);
+    }
+
+    [Fact]
+    public void PriceZoneChange_BelowConservative_Notifies()
+    {
+        var change = AlertRules.PriceZoneChange("SPY", previous: "mid",
+            price: 85m, conservative: 90m, optimistic: 110m);
+
+        Assert.NotNull(change);
+        Assert.True(change.Notify);
+        Assert.Contains("below its conservative", change.Title);
+    }
+
+    [Fact]
+    public void PriceZoneChange_BackIntoRange_RecordsWithoutNotifying()
+    {
+        var change = AlertRules.PriceZoneChange("SPY", previous: "above",
+            price: 100m, conservative: 90m, optimistic: 110m);
+
+        Assert.NotNull(change);
+        Assert.False(change.Notify); // returning to normal isn't news
+        Assert.Equal("mid", change.NewValue);
+    }
+
+    [Fact]
+    public void PriceZoneChange_SameZone_Null()
+    {
+        Assert.Null(AlertRules.PriceZoneChange("SPY", previous: "mid",
+            price: 100m, conservative: 90m, optimistic: 110m));
+    }
+
+    [Fact]
+    public void PriceZoneChange_MissingTargets_Null()
+    {
+        Assert.Null(AlertRules.PriceZoneChange("SPY", previous: "mid",
+            price: 100m, conservative: null, optimistic: 110m));
+    }
 }
 
 public class AlertEmailBuilderTests

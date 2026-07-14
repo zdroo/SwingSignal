@@ -7,6 +7,7 @@ using RegimeDeck.Application.Alerts;
 using RegimeDeck.Application.Common;
 using RegimeDeck.Application.Odds;
 using RegimeDeck.Application.Regime;
+using RegimeDeck.Contracts.Regime;
 
 namespace RegimeDeck.Infrastructure.BackgroundServices;
 
@@ -88,26 +89,43 @@ public class AlertEvaluationService : PeriodicBackgroundService
 
         foreach (var (symbol, subscribers) in symbolSubscribers)
         {
-            AlertRules.Change? change;
+            AssetOddsDto assetOdds;
             try
             {
-                var assetOdds = await odds.GetOddsAsync(symbol, ct);
-                change = AlertRules.StanceChange(
-                    symbol, PreviousValue(AlertRules.StanceKey(symbol)), assetOdds.TradeRead);
+                assetOdds = await odds.GetOddsAsync(symbol, ct);
             }
             catch (AppException)
             {
                 continue; // one broken asset must not kill the whole run
             }
 
-            if (change is null) continue;
+            var threeMonths = assetOdds.ThreeMonths;
+            var summary = ThreeMonthSummary.From(assetOdds);
 
-            var notifySubscribers = change.Notify && PreviousIsStable(change.Key);
-            await states.UpsertAsync(change.Key, change.NewValue, ct);
-            if (!notifySubscribers) continue;
+            // All three watchlist triggers read the one odds computation; each
+            // owns its own state key, hysteresis and notify rule.
+            AlertRules.Change?[] candidates =
+            [
+                AlertRules.StanceChange(
+                    symbol, PreviousValue(AlertRules.StanceKey(symbol)), assetOdds.TradeRead),
+                AlertRules.EdgeChange(
+                    symbol, PreviousValue(AlertRules.EdgeKey(symbol)), summary.Edge3M),
+                AlertRules.PriceZoneChange(
+                    symbol, PreviousValue(AlertRules.PriceZoneKey(symbol)),
+                    assetOdds.CurrentPrice, threeMonths.PriceTargetLow, threeMonths.PriceTargetHigh),
+            ];
 
-            foreach (var userId in subscribers)
-                perUser[userId].Add(change);
+            foreach (var change in candidates)
+            {
+                if (change is null) continue;
+
+                var notifySubscribers = change.Notify && PreviousIsStable(change.Key);
+                await states.UpsertAsync(change.Key, change.NewValue, ct);
+                if (!notifySubscribers) continue;
+
+                foreach (var userId in subscribers)
+                    perUser[userId].Add(change);
+            }
         }
 
         // One digest per user
