@@ -5,6 +5,7 @@ using RegimeDeck.Application.Backtesting;
 using RegimeDeck.Application.MacroData;
 using RegimeDeck.Application.Markets;
 using RegimeDeck.Application.Odds;
+using RegimeDeck.Application.Events;
 using RegimeDeck.Application.Regime;
 using RegimeDeck.Application.Screener;
 using RegimeDeck.Application.Sectors;
@@ -33,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IWatchlistService, WatchlistService>();
         services.AddScoped<IScreenerService, ScreenerService>();
         services.AddScoped<ISectorRotationService, SectorRotationService>();
+        services.AddScoped<IEconomicCalendarService, EconomicCalendarService>();
 
         return services;
     }

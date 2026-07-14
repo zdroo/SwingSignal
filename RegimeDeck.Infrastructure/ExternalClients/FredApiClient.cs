@@ -93,4 +93,40 @@ public class FredApiClient
             return [];
         }
     }
+
+    /// Future scheduled dates for a FRED release (its publication calendar),
+    /// on or after `from`. Fail-soft: an empty list on any error, so the
+    /// event calendar degrades to "no events" rather than throwing.
+    public async Task<List<DateTime>> GetReleaseDatesAsync(
+        int releaseId, DateTime from, CancellationToken ct = default)
+    {
+        var startDate = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var url = $"https://api.stlouisfed.org/fred/release/dates"
+                + $"?release_id={releaseId}"
+                + $"&api_key={_apiKey}"
+                + $"&file_type=json"
+                + $"&include_release_dates_with_no_data=true" // includes not-yet-published dates
+                + $"&sort_order=asc";
+
+        try
+        {
+            var response = await _http.GetFromJsonAsync<JsonElement>(url, ct);
+            if (!response.TryGetProperty("release_dates", out var dates))
+                return [];
+
+            var result = new List<DateTime>();
+            foreach (var d in dates.EnumerateArray())
+            {
+                if (DateTime.TryParse(d.GetProperty("date").GetString(), CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var date) && date >= from.Date)
+                    result.Add(date.Date);
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch FRED release dates for {ReleaseId}", releaseId);
+            return [];
+        }
+    }
 }

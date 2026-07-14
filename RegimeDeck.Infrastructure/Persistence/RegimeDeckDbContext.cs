@@ -17,6 +17,7 @@ public class RegimeDeckDbContext : DbContext
     public DbSet<AlertState> AlertStates => Set<AlertState>();
     public DbSet<ScreenerRow> ScreenerRows => Set<ScreenerRow>();
     public DbSet<SectorRotationRow> SectorRotationRows => Set<SectorRotationRow>();
+    public DbSet<EconomicEvent> EconomicEvents => Set<EconomicEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
