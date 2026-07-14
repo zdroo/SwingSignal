@@ -130,66 +130,6 @@ public class AlertRulesTests
     {
         Assert.Null(AlertRules.EdgeChange("SPY", previous: "flat", edge: null));
     }
-
-    // ── Price-zone breakouts ──────────────────────────────────────────────
-
-    [Fact]
-    public void PriceZoneChange_FirstEvaluation_RecordsWithoutNotifying()
-    {
-        var change = AlertRules.PriceZoneChange("SPY", previous: null,
-            price: 120m, conservative: 90m, optimistic: 110m);
-
-        Assert.NotNull(change);
-        Assert.False(change.Notify);
-        Assert.Equal("above", change.NewValue);
-    }
-
-    [Fact]
-    public void PriceZoneChange_IntoOptimistic_Notifies()
-    {
-        var change = AlertRules.PriceZoneChange("SPY", previous: "mid",
-            price: 111m, conservative: 90m, optimistic: 110m);
-
-        Assert.NotNull(change);
-        Assert.True(change.Notify);
-        Assert.Contains("above its optimistic", change.Title);
-    }
-
-    [Fact]
-    public void PriceZoneChange_BelowConservative_Notifies()
-    {
-        var change = AlertRules.PriceZoneChange("SPY", previous: "mid",
-            price: 85m, conservative: 90m, optimistic: 110m);
-
-        Assert.NotNull(change);
-        Assert.True(change.Notify);
-        Assert.Contains("below its conservative", change.Title);
-    }
-
-    [Fact]
-    public void PriceZoneChange_BackIntoRange_RecordsWithoutNotifying()
-    {
-        var change = AlertRules.PriceZoneChange("SPY", previous: "above",
-            price: 100m, conservative: 90m, optimistic: 110m);
-
-        Assert.NotNull(change);
-        Assert.False(change.Notify); // returning to normal isn't news
-        Assert.Equal("mid", change.NewValue);
-    }
-
-    [Fact]
-    public void PriceZoneChange_SameZone_Null()
-    {
-        Assert.Null(AlertRules.PriceZoneChange("SPY", previous: "mid",
-            price: 100m, conservative: 90m, optimistic: 110m));
-    }
-
-    [Fact]
-    public void PriceZoneChange_MissingTargets_Null()
-    {
-        Assert.Null(AlertRules.PriceZoneChange("SPY", previous: "mid",
-            price: 100m, conservative: null, optimistic: 110m));
-    }
 }
 
 public class AlertEmailBuilderTests

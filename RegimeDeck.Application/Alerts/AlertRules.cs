@@ -16,7 +16,6 @@ public static class AlertRules
     public const string HealthKey = "health";
     public static string StanceKey(string symbol) => $"stance:{symbol}";
     public static string EdgeKey(string symbol) => $"edge:{symbol}";
-    public static string PriceZoneKey(string symbol) => $"pricezone:{symbol}";
 
     public sealed record Change(string Key, string NewValue, bool Notify, string Title, string Detail);
 
@@ -67,31 +66,6 @@ public static class AlertRules
             Title: $"{symbol}: regime edge turned positive (now {Signed(edge.Value)}pp)",
             Detail: "Conditions like today are now adding to this asset's odds versus its base rate. "
                 + "Descriptive, not a buy signal — see the asset page.");
-    }
-
-    /// The price crossing above its optimistic (P75) or below its conservative
-    /// (P25) 3-month target. Returning into the normal range updates state
-    /// silently — only breakouts either side are news.
-    public static Change? PriceZoneChange(
-        string symbol, string? previous, decimal? price, decimal? conservative, decimal? optimistic)
-    {
-        if (price is null || conservative is null || optimistic is null) return null;
-
-        var zone = price >= optimistic ? "above" : price <= conservative ? "below" : "mid";
-        if (previous == zone) return null;
-
-        var notify = previous is not null && zone != "mid";
-        return new Change(
-            PriceZoneKey(symbol),
-            zone,
-            Notify: notify,
-            Title: zone == "above"
-                ? $"{symbol} pushed above its optimistic 3-month price target"
-                : zone == "below"
-                ? $"{symbol} fell below its conservative 3-month price target"
-                : $"{symbol} is back within its 3-month price range",
-            Detail: "The target range is the middle-half of historical outcomes after conditions like "
-                + "today's — not a prediction. See the asset page for the numbers.");
     }
 
     private static string Signed(double value) =>
