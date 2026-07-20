@@ -51,8 +51,10 @@ public class ScreenerComputeService : PeriodicBackgroundService
             }
         }
 
-        if (computed > 0)
-            Logger.LogInformation("Screener recomputed {Count} of {Total} assets",
-                computed, ScreenerUniverse.Symbols.Count);
+        // Warn (not just stay silent) when a whole run produces nothing — that
+        // signals a systemic problem, e.g. ingestion is down.
+        var total = ScreenerUniverse.Symbols.Count;
+        Logger.Log(computed == 0 ? LogLevel.Warning : LogLevel.Information,
+            "Screener recomputed {Count} of {Total} assets", computed, total);
     }
 }

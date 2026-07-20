@@ -61,8 +61,10 @@ public class SectorRotationComputeService : PeriodicBackgroundService
             }
         }
 
-        if (computed > 0)
-            Logger.LogInformation("Sector rotation recomputed {Count} of {Total} sectors",
-                computed, SectorUniverse.Sectors.Count);
+        // Warn (not just stay silent) when a whole run produces nothing — that
+        // signals a systemic problem, e.g. ingestion is down.
+        var total = SectorUniverse.Sectors.Count;
+        Logger.Log(computed == 0 ? LogLevel.Warning : LogLevel.Information,
+            "Sector rotation recomputed {Count} of {Total} sectors", computed, total);
     }
 }
