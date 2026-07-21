@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using RegimeDeck.Application.Abstractions.Persistence;
 using RegimeDeck.Contracts.Regime;
 using RegimeDeck.Domain.Enums;
@@ -6,16 +7,37 @@ namespace RegimeDeck.Application.Regime;
 
 public class MacroRegimeService : IMacroRegimeService
 {
+    // The regime is the hottest read (every landing/dashboard visit) but its
+    // source data only changes when the daily FRED ingestion runs — so cache it
+    // like the other computed boards. A sparse result (first ingestion still
+    // running) gets a short TTL so a cold start isn't pinned for the full window.
+    private const string CacheKey = "current-regime";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan EmptyCacheTtl = TimeSpan.FromSeconds(30);
+
     private readonly IMacroRepository _macro;
     private readonly MacroSnapshotBuilder _snapshots;
+    private readonly IMemoryCache _cache;
 
-    public MacroRegimeService(IMacroRepository macro, MacroSnapshotBuilder snapshots)
+    public MacroRegimeService(IMacroRepository macro, MacroSnapshotBuilder snapshots, IMemoryCache cache)
     {
         _macro = macro;
         _snapshots = snapshots;
+        _cache = cache;
     }
 
     public async Task<MacroRegimeDto> GetCurrentRegimeAsync(CancellationToken ct = default)
+    {
+        if (_cache.TryGetValue(CacheKey, out MacroRegimeDto? cached) && cached is not null)
+            return cached;
+
+        var regime = await BuildCurrentRegimeAsync(ct);
+
+        _cache.Set(CacheKey, regime, regime.Indicators.Count > 0 ? CacheTtl : EmptyCacheTtl);
+        return regime;
+    }
+
+    private async Task<MacroRegimeDto> BuildCurrentRegimeAsync(CancellationToken ct)
     {
         var indicators = new Dictionary<string, MacroIndicatorValueDto>();
 

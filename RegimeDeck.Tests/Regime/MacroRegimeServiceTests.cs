@@ -15,7 +15,9 @@ namespace RegimeDeck.Tests.Regime;
 public class MacroRegimeServiceTests
 {
     private static MacroRegimeService Service(FakeMacroRepository repo) =>
-        new(repo, new MacroSnapshotBuilder(repo, new MemoryCache(new MemoryCacheOptions())));
+        new(repo,
+            new MacroSnapshotBuilder(repo, new MemoryCache(new MemoryCacheOptions())),
+            new MemoryCache(new MemoryCacheOptions()));
 
     // Two years of monthly points for one indicator, most recent point
     // `monthsStale` months behind "now" — simulating a real publication lag.
