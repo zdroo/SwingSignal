@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration;
+using RegimeDeck.Api.Auth;
 using RegimeDeck.Application.Auth;
 using RegimeDeck.Contracts.Auth;
 
@@ -12,25 +14,48 @@ namespace RegimeDeck.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _auth;
+    private readonly string _frontendUrl;
 
-    public AuthController(IAuthService auth) => _auth = auth;
+    public AuthController(IAuthService auth, IConfiguration config)
+    {
+        _auth = auth;
+        _frontendUrl = config["Frontend:Url"] ?? "http://localhost:3000";
+    }
 
     [HttpPost("register")]
     [EnableRateLimiting("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct) =>
-        Ok(await _auth.RegisterAsync(request, ct));
+        Issue(await _auth.RegisterAsync(request, UserAgent(), ct));
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct) =>
-        Ok(await _auth.LoginAsync(request, ct));
+        Issue(await _auth.LoginAsync(request, UserAgent(), ct));
 
     [HttpPost("google")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request, CancellationToken ct) =>
-        Ok(await _auth.GoogleLoginAsync(request, ct));
+        Issue(await _auth.GoogleLoginAsync(request, UserAgent(), ct));
 
+    // The refresh token rides in the HttpOnly cookie, not the body. Reject a
+    // cross-site Origin so the cookie can't be driven by a malicious page (CSRF).
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct) =>
-        Ok(await _auth.RefreshAsync(request, ct));
+    public async Task<IActionResult> Refresh(CancellationToken ct)
+    {
+        if (!OriginAllowed())
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Cross-origin refresh rejected." });
+
+        return Issue(await _auth.RefreshAsync(RefreshTokenCookie.Read(Request), UserAgent(), ct));
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(CancellationToken ct)
+    {
+        if (!OriginAllowed())
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Cross-origin logout rejected." });
+
+        await _auth.LogoutAsync(RefreshTokenCookie.Read(Request), ct);
+        RefreshTokenCookie.Clear(Response);
+        return Ok(new { message = "Signed out." });
+    }
 
     [HttpPost("confirm-email")]
     public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request, CancellationToken ct)
@@ -72,5 +97,27 @@ public class AuthController : ControllerBase
                 ?? User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value,
             plan = User.FindFirst("plan")?.Value ?? "Free"
         });
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    // Writes the rotated refresh token into the HttpOnly cookie and returns only
+    // the access token / profile in the body.
+    private OkObjectResult Issue(AuthResult result)
+    {
+        RefreshTokenCookie.Set(Response, result.RefreshToken);
+        return Ok(result.Response);
+    }
+
+    private string? UserAgent() => Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
+
+    // CSRF guard for the cookie-authenticated endpoints. A browser always sends
+    // Origin on a cross-origin POST; if present it must match our frontend. Absent
+    // Origin (same-origin or a non-browser client) is allowed — SameSite still guards.
+    private bool OriginAllowed()
+    {
+        var origin = Request.Headers.Origin.ToString();
+        return string.IsNullOrEmpty(origin)
+            || string.Equals(origin.TrimEnd('/'), _frontendUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
     }
 }

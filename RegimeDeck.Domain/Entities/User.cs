@@ -8,8 +8,9 @@ public class User : BaseEntity
     public string PasswordHash { get; set; } = string.Empty;
     public UserPlan Plan { get; set; } = UserPlan.Free;
     public DateTime CreatedAt { get; set; }
-    public string? RefreshToken { get; set; }
-    public DateTime? RefreshTokenExpiry { get; set; }
+
+    // Refresh tokens live in their own table (RefreshToken) — one row per session,
+    // rotated, hashed, revocable. See IRefreshTokenRepository.
 
     // Email confirmation (unconfirmed accounts are purged after a grace period)
     public bool IsEmailConfirmed { get; set; }

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Configuration;
 using RegimeDeck.Application.Abstractions.Billing;
 using RegimeDeck.Application.Abstractions.Email;
@@ -12,8 +13,9 @@ namespace RegimeDeck.Application.Auth;
 
 public class AuthService : IAuthService
 {
-    // Matches the access-token lifetime (1 year) so the refresh token is never
-    // the reason a session ends — maximum login persistence.
+    // The session length lives here (the access token is short — 1h — and rotated
+    // silently). Rotation issues a fresh 365-day token each time, so an active
+    // user effectively never has to sign in again.
     private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(365);
     private static readonly TimeSpan ConfirmationTokenLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan ResetTokenLifetime = TimeSpan.FromHours(1);
@@ -24,6 +26,7 @@ public class AuthService : IAuthService
     private const int MaxEmailsPerWindow = 5;
 
     private readonly IUserRepository _users;
+    private readonly IRefreshTokenRepository _refreshTokens;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokens;
     private readonly IGoogleTokenValidator _google;
@@ -34,6 +37,7 @@ public class AuthService : IAuthService
 
     public AuthService(
         IUserRepository users,
+        IRefreshTokenRepository refreshTokens,
         IPasswordHasher passwordHasher,
         ITokenService tokens,
         IGoogleTokenValidator google,
@@ -43,6 +47,7 @@ public class AuthService : IAuthService
         IConfiguration config)
     {
         _users = users;
+        _refreshTokens = refreshTokens;
         _passwordHasher = passwordHasher;
         _tokens = tokens;
         _google = google;
@@ -52,7 +57,7 @@ public class AuthService : IAuthService
         _frontendUrl = config["Frontend:Url"] ?? "http://localhost:3000";
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
+    public async Task<AuthResult> RegisterAsync(RegisterRequest request, string? userAgent, CancellationToken ct = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
@@ -72,17 +77,16 @@ public class AuthService : IAuthService
             CreatedAt = DateTime.UtcNow
         };
 
-        IssueRefreshToken(user);
         var confirmToken = IssueConfirmationToken(user);
         await _users.AddAsync(user, ct);
 
         // Fire-and-forget semantics: a mail outage must not block registration
         await _email.SendEmailConfirmationAsync(user.Email, ConfirmUrl(confirmToken), ct);
 
-        return BuildResponse(user);
+        return await OpenSessionAsync(user, userAgent, ct);
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
+    public async Task<AuthResult> LoginAsync(LoginRequest request, string? userAgent, CancellationToken ct = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
 
@@ -90,29 +94,55 @@ public class AuthService : IAuthService
         if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash))
             throw new AuthenticationFailedException("Invalid email or password.");
 
-        IssueRefreshToken(user);
-        await _users.UpdateAsync(user, ct);
-
-        return BuildResponse(user);
+        return await OpenSessionAsync(user, userAgent, ct);
     }
 
-    public async Task<AuthResponse> RefreshAsync(RefreshRequest request, CancellationToken ct = default)
+    public async Task<AuthResult> RefreshAsync(string? refreshToken, string? userAgent, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            throw new AuthenticationFailedException("Refresh token required.");
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new AuthenticationFailedException("Session is invalid. Please sign in again.");
 
-        var user = await _users.GetByRefreshTokenAsync(request.RefreshToken, ct);
+        var existing = await _refreshTokens.GetByHashAsync(HashToken(refreshToken), ct);
+        if (existing is null)
+            throw new AuthenticationFailedException("Session is invalid. Please sign in again.");
 
-        if (user is null || user.RefreshTokenExpiry is null || user.RefreshTokenExpiry < DateTime.UtcNow)
-            throw new AuthenticationFailedException("Refresh token is invalid or expired.");
+        var now = DateTime.UtcNow;
 
-        IssueRefreshToken(user);
-        await _users.UpdateAsync(user, ct);
+        // Reuse detection: a token that was already rotated away is being replayed.
+        // With client-side single-flight this shouldn't happen on the honest path —
+        // it signals theft. Revoke the whole family and force a fresh sign-in.
+        if (existing.RevokedAt is not null)
+        {
+            await _refreshTokens.RevokeFamilyAsync(existing.FamilyId, now, ct);
+            throw new AuthenticationFailedException("Session is invalid. Please sign in again.");
+        }
 
-        return BuildResponse(user);
+        if (existing.ExpiresAt <= now)
+            throw new AuthenticationFailedException("Session has expired. Please sign in again.");
+
+        var user = await _users.GetByIdAsync(existing.UserId, ct);
+        if (user is null)
+            throw new AuthenticationFailedException("Session is invalid. Please sign in again.");
+
+        // Rotate within the same family (same session/device continues)
+        var (replacement, raw) = NewRefreshToken(user.Id, existing.FamilyId, userAgent);
+        await _refreshTokens.RotateAsync(existing, replacement, ct);
+
+        return BuildResult(user, raw);
     }
 
-    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request, CancellationToken ct = default)
+    public async Task LogoutAsync(string? refreshToken, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken)) return;
+
+        var existing = await _refreshTokens.GetByHashAsync(HashToken(refreshToken), ct);
+        if (existing is null) return;
+
+        // Kill the whole rotation chain, so a stolen mid-chain token can't continue
+        await _refreshTokens.RevokeFamilyAsync(existing.FamilyId, DateTime.UtcNow, ct);
+    }
+
+    public async Task<AuthResult> GoogleLoginAsync(GoogleLoginRequest request, string? userAgent, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.IdToken))
             throw new AuthenticationFailedException("Google ID token required.");
@@ -135,18 +165,16 @@ public class AuthService : IAuthService
                 IsEmailConfirmed = true
             };
 
-            IssueRefreshToken(user);
             await _users.AddAsync(user, ct);
             await _email.SendWelcomeAsync(user.Email, ct);
         }
-        else
+        else if (!user.IsEmailConfirmed)
         {
             user.IsEmailConfirmed = true; // Google ownership proof supersedes pending confirmation
-            IssueRefreshToken(user);
             await _users.UpdateAsync(user, ct);
         }
 
-        return BuildResponse(user);
+        return await OpenSessionAsync(user, userAgent, ct);
     }
 
     public async Task ConfirmEmailAsync(ConfirmEmailRequest request, CancellationToken ct = default)
@@ -231,10 +259,11 @@ public class AuthService : IAuthService
         user.PasswordResetTokenExpiry = null;
         // A password reset proves email ownership just as well as the confirm link
         user.IsEmailConfirmed = true;
-        // Invalidate existing sessions
-        IssueRefreshToken(user);
-
         await _users.UpdateAsync(user, ct);
+
+        // Someone resetting a password may be locking out an intruder — drop every
+        // existing session. The user signs in fresh afterward.
+        await _refreshTokens.RevokeAllForUserAsync(user.Id, DateTime.UtcNow, ct);
     }
 
     public async Task<UserProfileDto> GetProfileAsync(Guid userId, CancellationToken ct = default)
@@ -266,7 +295,8 @@ public class AuthService : IAuthService
         await _users.UpdateAsync(user, ct);
     }
 
-    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken ct = default)
+    public async Task<AuthResult> ChangePasswordAsync(
+        Guid userId, ChangePasswordRequest request, string? userAgent, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
             throw new ValidationException("Password must be at least 8 characters.");
@@ -280,8 +310,12 @@ public class AuthService : IAuthService
             throw new ValidationException("Current password is incorrect.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
-        IssueRefreshToken(user); // invalidate other sessions
         await _users.UpdateAsync(user, ct);
+
+        // Sign every session out, then open a fresh one for THIS client so the
+        // caller stays signed in while all other devices are dropped.
+        await _refreshTokens.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
+        return await OpenSessionAsync(user, userAgent, ct);
     }
 
     public async Task DeleteAccountAsync(Guid userId, CancellationToken ct = default)
@@ -294,18 +328,61 @@ public class AuthService : IAuthService
         // (logs, never throws) so a Stripe outage can't block the user's deletion.
         await _billing.CancelSubscriptionAsync(userId, ct);
 
-        // GDPR: unlink search history first, then remove the account
+        // GDPR: unlink search history first, then remove the account. The user's
+        // refresh tokens are cascade-deleted with the account row.
         await _analytics.DetachUserAsync(userId, ct);
         await _users.DeleteAsync(user, ct);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────
+    // ── Session helpers ──────────────────────────────────────────────────
 
-    private static void IssueRefreshToken(User user)
+    // A fresh login/registration opens a new family (a new session/device).
+    private async Task<AuthResult> OpenSessionAsync(User user, string? userAgent, CancellationToken ct)
     {
-        user.RefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-        user.RefreshTokenExpiry = DateTime.UtcNow.Add(RefreshTokenLifetime);
+        var (token, raw) = NewRefreshToken(user.Id, Guid.NewGuid(), userAgent);
+        await _refreshTokens.AddAsync(token, ct);
+        return BuildResult(user, raw);
     }
+
+    private static (RefreshToken Entity, string Raw) NewRefreshToken(Guid userId, Guid familyId, string? userAgent)
+    {
+        // Hex is cookie-safe (no +/=). 64 random bytes → 128 hex chars.
+        var raw = Convert.ToHexString(RandomNumberGenerator.GetBytes(64));
+        var now = DateTime.UtcNow;
+
+        var entity = new RefreshToken
+        {
+            UserId = userId,
+            TokenHash = HashToken(raw),
+            FamilyId = familyId,
+            CreatedAt = now,
+            ExpiresAt = now.Add(RefreshTokenLifetime),
+            UserAgent = userAgent is { Length: > 256 } ? userAgent[..256] : userAgent,
+        };
+
+        return (entity, raw);
+    }
+
+    private AuthResult BuildResult(User user, string rawRefreshToken)
+    {
+        var access = _tokens.CreateAccessToken(user);
+
+        var response = new AuthResponse(
+            AccessToken: access.Token,
+            AccessTokenExpiry: access.Expiry,
+            Email: user.Email,
+            Plan: user.Plan.ToString());
+
+        return new AuthResult(response, rawRefreshToken);
+    }
+
+    // Only the hash of a refresh token is ever stored, so a DB leak yields nothing
+    // usable. SHA-256 (not a slow KDF) is right here: the token is 64 bytes of
+    // CSPRNG output, not a low-entropy password, so there's nothing to brute-force.
+    private static string HashToken(string raw) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+
+    // ── Email helpers ────────────────────────────────────────────────────
 
     private static string IssueConfirmationToken(User user)
     {
@@ -345,16 +422,4 @@ public class AuthService : IAuthService
 
     private string ConfirmUrl(string token) =>
         $"{_frontendUrl}/auth/confirm-email?token={token}";
-
-    private AuthResponse BuildResponse(User user)
-    {
-        var access = _tokens.CreateAccessToken(user);
-
-        return new AuthResponse(
-            AccessToken: access.Token,
-            RefreshToken: user.RefreshToken!,
-            AccessTokenExpiry: access.Expiry,
-            Email: user.Email,
-            Plan: user.Plan.ToString());
-    }
 }

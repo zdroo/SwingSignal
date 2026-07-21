@@ -10,12 +10,11 @@ namespace RegimeDeck.Infrastructure.Security;
 
 public class JwtTokenService : ITokenService
 {
-    // Long-lived by design: keep users signed in as long as possible. With no
-    // silent-refresh on the web client, the access-token lifetime IS the session
-    // length, so it's set to a year. (Trade-off accepted: a leaked token stays
-    // valid for that window — there's no server-side revocation. See the deploy
-    // checklist if that ever needs to change.)
-    private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromDays(365);
+    // Short-lived and stateless: validated by signature alone (no per-request DB
+    // hit). The session length lives in the refresh token instead — the client
+    // silently rotates an expired access token via /auth/refresh. A short window
+    // is what makes revocation effective: a revoked session dies within an hour.
+    private static readonly TimeSpan AccessTokenLifetime = TimeSpan.FromHours(1);
 
     private readonly IConfiguration _config;
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using RegimeDeck.Api.Auth;
 using RegimeDeck.Api.Extensions;
 using RegimeDeck.Application.Auth;
 using RegimeDeck.Contracts.Auth;
@@ -24,12 +25,13 @@ public class UsersController : ControllerBase
     [HttpPut("me/password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
     {
-        await _auth.ChangePasswordAsync(User.RequireUserId(), request, ct);
-        // Don't claim other sessions are signed out: access tokens are stateless
-        // 7-day JWTs, so rotating the refresh token only stops them refreshing —
-        // existing access tokens keep working until they expire. (Pre-launch
-        // hardening: shorten access tokens / add revocation before public launch.)
-        return Ok(new { message = "Password updated." });
+        var userAgent = Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
+        var result = await _auth.ChangePasswordAsync(User.RequireUserId(), request, userAgent, ct);
+
+        // Every other session is revoked; this client gets a fresh session cookie
+        // and access token so it stays signed in — now genuinely true.
+        RefreshTokenCookie.Set(Response, result.RefreshToken);
+        return Ok(new { message = "Password updated. Other sessions have been signed out.", accessToken = result.Response.AccessToken });
     }
 
     public record WeeklyReportRequest(bool Enabled);

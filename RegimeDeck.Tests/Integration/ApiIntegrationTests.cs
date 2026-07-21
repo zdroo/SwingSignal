@@ -288,21 +288,41 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
     }
 
+    // The refresh token lives only in the HttpOnly cookie the client stores from
+    // registration — never in the response body. A bodyless POST to /refresh sends
+    // that cookie and gets a fresh access token back. (The test client persists
+    // cookies: WebApplicationFactoryClientOptions.HandleCookies defaults to true.)
     [Fact]
-    public async Task RefreshToken_RoundTrip()
+    public async Task RefreshToken_RoundTrip_ViaCookie()
     {
         var email = UniqueEmail();
         var register = await _client.PostAsJsonAsync("/api/auth/register",
             new { email, password = "integration-pass-1" });
-        using var registerDoc = JsonDocument.Parse(await register.Content.ReadAsStringAsync());
-        var refreshToken = registerDoc.RootElement.GetProperty("refreshToken").GetString();
+        Assert.Equal(HttpStatusCode.OK, register.StatusCode);
 
-        var refresh = await _client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken });
+        using (var registerDoc = JsonDocument.Parse(await register.Content.ReadAsStringAsync()))
+            Assert.False(registerDoc.RootElement.TryGetProperty("refreshToken", out _)); // never in the body
+
+        var refresh = await _client.PostAsync("/api/auth/refresh", null);
 
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
         using var refreshDoc = JsonDocument.Parse(await refresh.Content.ReadAsStringAsync());
         Assert.Equal(email, refreshDoc.RootElement.GetProperty("email").GetString());
         Assert.False(string.IsNullOrEmpty(refreshDoc.RootElement.GetProperty("accessToken").GetString()));
+    }
+
+    [Fact]
+    public async Task Logout_RevokesTheSession_RefreshThen401()
+    {
+        var email = UniqueEmail();
+        await _client.PostAsJsonAsync("/api/auth/register", new { email, password = "integration-pass-1" });
+
+        var logout = await _client.PostAsync("/api/auth/logout", null);
+        Assert.Equal(HttpStatusCode.OK, logout.StatusCode);
+
+        // Cookie cleared and the family revoked — refresh can no longer succeed
+        var refresh = await _client.PostAsync("/api/auth/refresh", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
     }
 
     // ── Pro dark launch: with the flag OFF, no gate exists at all ─────────

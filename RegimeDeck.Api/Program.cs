@@ -77,7 +77,11 @@ var frontendUrl = builder.Configuration["Frontend:Url"] ?? "http://localhost:300
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins(frontendUrl)
      .AllowAnyHeader()
-     .AllowAnyMethod()));
+     .AllowAnyMethod()
+     // Required so the browser sends/stores the HttpOnly refresh cookie on
+     // cross-origin auth calls. Only legal with a specific origin (not *) — which
+     // is exactly what WithOrigins(frontendUrl) gives us.
+     .AllowCredentials()));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

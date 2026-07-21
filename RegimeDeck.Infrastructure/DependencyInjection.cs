@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<ICandleRepository, CandleRepository>();
         services.AddScoped<IMacroRepository, MacroRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<IWatchlistRepository, WatchlistRepository>();
         services.AddScoped<IAlertStateRepository, AlertStateRepository>();

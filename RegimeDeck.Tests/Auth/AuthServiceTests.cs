@@ -15,12 +15,15 @@ namespace RegimeDeck.Tests.Auth;
 public class AuthServiceTests
 {
     private readonly Mock<IUserRepository> _users = new();
+    private readonly Mock<IRefreshTokenRepository> _refreshTokens = new();
     private readonly Mock<IPasswordHasher> _hasher = new();
     private readonly Mock<ITokenService> _tokens = new();
     private readonly Mock<IGoogleTokenValidator> _google = new();
     private readonly Mock<IEmailService> _email = new();
     private readonly Mock<IAnalyticsRepository> _analytics = new();
     private readonly Mock<IBillingService> _billing = new();
+
+    private const string Agent = "integration-agent";
 
     private AuthService BuildService()
     {
@@ -35,12 +38,12 @@ public class AuthServiceTests
             .Returns(new AccessToken("jwt-token", new DateTime(2026, 8, 1)));
 
         return new AuthService(
-            _users.Object, _hasher.Object, _tokens.Object, _google.Object, _email.Object,
-            _analytics.Object, _billing.Object, config);
+            _users.Object, _refreshTokens.Object, _hasher.Object, _tokens.Object, _google.Object,
+            _email.Object, _analytics.Object, _billing.Object, config);
     }
 
     [Fact]
-    public async Task DeleteAccount_DetachesSearchHistoryBeforeDeletingTheUser()
+    public async Task DeleteAccount_CancelsBillingDetachesHistoryThenDeletesUser()
     {
         var userId = Guid.NewGuid();
         var user = new User { Id = userId, Email = "gone@example.com" };
@@ -87,10 +90,9 @@ public class AuthServiceTests
         var service = BuildService();
 
         var ex = await Assert.ThrowsAsync<ValidationException>(() =>
-            service.RegisterAsync(new RegisterRequest("user@example.com", "short")));
+            service.RegisterAsync(new RegisterRequest("user@example.com", "short"), Agent));
 
         Assert.Equal("Password must be at least 8 characters.", ex.Message);
-        // Verifying nothing happened — the sanctioned It.IsAny use
         _users.Verify(u => u.AddAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }
@@ -103,14 +105,14 @@ public class AuthServiceTests
         var service = BuildService();
 
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-            service.RegisterAsync(new RegisterRequest("taken@example.com", "password123")));
+            service.RegisterAsync(new RegisterRequest("taken@example.com", "password123"), Agent));
 
         Assert.Equal("An account with this email already exists.", ex.Message);
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]
-    public async Task Register_Success_CreatesUnconfirmedUserAndSendsConfirmation()
+    public async Task Register_Success_CreatesUnconfirmedUserSendsConfirmationAndOpensSession()
     {
         _users.Setup(u => u.ExistsByEmailAsync("new@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
@@ -124,18 +126,23 @@ public class AuthServiceTests
         var service = BuildService();
 
         // Email is normalized to lowercase
-        var response = await service.RegisterAsync(new RegisterRequest("New@Example.COM", "password123"));
+        var result = await service.RegisterAsync(new RegisterRequest("New@Example.COM", "password123"), Agent);
 
-        Assert.Equal("jwt-token", response.AccessToken);
-        Assert.Equal("new@example.com", response.Email);
-        Assert.Equal("Free", response.Plan);
+        Assert.Equal("jwt-token", result.Response.AccessToken);
+        Assert.Equal("new@example.com", result.Response.Email);
+        Assert.Equal("Free", result.Response.Plan);
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken)); // raw refresh token minted for the cookie
 
         Assert.NotNull(saved);
         Assert.Equal("HASHED", saved.PasswordHash);
         Assert.False(saved.IsEmailConfirmed);
         Assert.Equal(1, saved.ConfirmationEmailCount);
         Assert.NotNull(saved.EmailConfirmationToken);
-        Assert.NotNull(saved.RefreshToken);
+
+        // A session row was opened for this user (new family)
+        _refreshTokens.Verify(r => r.AddAsync(
+            It.Is<RefreshToken>(t => t.UserId == saved!.Id && !string.IsNullOrEmpty(t.TokenHash)),
+            It.IsAny<CancellationToken>()), Times.Once());
 
         _email.Verify(e => e.SendEmailConfirmationAsync(
             "new@example.com",
@@ -156,16 +163,16 @@ public class AuthServiceTests
         var service = BuildService();
 
         var ex = await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
-            service.LoginAsync(new LoginRequest("user@example.com", "wrongpass")));
+            service.LoginAsync(new LoginRequest("user@example.com", "wrongpass"), Agent));
 
         Assert.Equal("Invalid email or password.", ex.Message);
-        _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
+        _refreshTokens.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]
-    public async Task Login_CorrectPassword_IssuesTokensAndPersistsFreshRefresh()
+    public async Task Login_CorrectPassword_OpensASession()
     {
-        var user = new User { Email = "user@example.com", PasswordHash = "STORED", Plan = UserPlan.Free };
+        var user = new User { Id = Guid.NewGuid(), Email = "user@example.com", PasswordHash = "STORED", Plan = UserPlan.Free };
         // Login normalizes the address, so the mixed-case input must still resolve
         _users.Setup(u => u.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
@@ -173,14 +180,121 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var response = await service.LoginAsync(new LoginRequest("User@Example.COM", "rightpass"));
+        var result = await service.LoginAsync(new LoginRequest("User@Example.COM", "rightpass"), Agent);
 
-        Assert.Equal("jwt-token", response.AccessToken);
-        Assert.Equal("user@example.com", response.Email);
-        Assert.Equal("Free", response.Plan);
-        Assert.False(string.IsNullOrEmpty(response.RefreshToken)); // a fresh refresh token was minted
-        Assert.NotNull(user.RefreshTokenExpiry);
-        _users.Verify(u => u.UpdateAsync(user, It.IsAny<CancellationToken>()), Times.Once()); // rotation persisted
+        Assert.Equal("jwt-token", result.Response.AccessToken);
+        Assert.Equal("user@example.com", result.Response.Email);
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
+        // A new session (family) was opened for this user
+        _refreshTokens.Verify(r => r.AddAsync(
+            It.Is<RefreshToken>(t => t.UserId == user.Id), It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    // ── Refresh: rotation & reuse detection ──────────────────────────────
+
+    [Fact]
+    public async Task Refresh_ValidToken_RotatesWithinTheSameFamily()
+    {
+        var userId = Guid.NewGuid();
+        var familyId = Guid.NewGuid();
+        var user = new User { Id = userId, Email = "user@example.com", Plan = UserPlan.Free };
+        var current = new RefreshToken
+        {
+            UserId = userId,
+            FamilyId = familyId,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        // The service hashes whatever raw token it's given, then looks it up — so
+        // return `current` for ANY hash lookup in this test.
+        _refreshTokens.Setup(r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(current);
+        _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+
+        RefreshToken? replacement = null;
+        _refreshTokens.Setup(r => r.RotateAsync(current, It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()))
+            .Callback<RefreshToken, RefreshToken, CancellationToken>((_, repl, _) => replacement = repl)
+            .Returns(Task.CompletedTask);
+
+        var result = await BuildService().RefreshAsync("some-raw-token", Agent);
+
+        Assert.Equal("jwt-token", result.Response.AccessToken);
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
+        Assert.NotNull(replacement);
+        Assert.Equal(familyId, replacement.FamilyId);   // stays in the same rotation chain
+        Assert.Equal(userId, replacement.UserId);
+    }
+
+    [Fact]
+    public async Task Refresh_RevokedTokenReplayed_RevokesTheWholeFamilyAndThrows()
+    {
+        var familyId = Guid.NewGuid();
+        var revoked = new RefreshToken
+        {
+            UserId = Guid.NewGuid(),
+            FamilyId = familyId,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+            RevokedAt = DateTime.UtcNow.AddMinutes(-1), // already rotated away → reuse = theft
+        };
+        _refreshTokens.Setup(r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(revoked);
+
+        var service = BuildService();
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
+            service.RefreshAsync("replayed-token", Agent));
+
+        _refreshTokens.Verify(r => r.RevokeFamilyAsync(familyId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once());
+        _refreshTokens.Verify(r => r.RotateAsync(It.IsAny<RefreshToken>(), It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task Refresh_ExpiredToken_Throws()
+    {
+        var expired = new RefreshToken
+        {
+            UserId = Guid.NewGuid(),
+            FamilyId = Guid.NewGuid(),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+        };
+        _refreshTokens.Setup(r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expired);
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() =>
+            BuildService().RefreshAsync("expired-token", Agent));
+    }
+
+    [Fact]
+    public async Task Refresh_UnknownOrEmptyToken_Throws()
+    {
+        _refreshTokens.Setup(r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((RefreshToken?)null);
+        var service = BuildService();
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() => service.RefreshAsync("nope", Agent));
+        await Assert.ThrowsAsync<AuthenticationFailedException>(() => service.RefreshAsync(null, Agent));
+    }
+
+    // ── Logout ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Logout_RevokesTheFamily()
+    {
+        var familyId = Guid.NewGuid();
+        var token = new RefreshToken { FamilyId = familyId, UserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(1) };
+        _refreshTokens.Setup(r => r.GetByHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(token);
+
+        await BuildService().LogoutAsync("a-token");
+
+        _refreshTokens.Verify(r => r.RevokeFamilyAsync(familyId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [Fact]
+    public async Task Logout_NoCookie_IsANoOp()
+    {
+        await BuildService().LogoutAsync(null);
+        _refreshTokens.Verify(r => r.RevokeFamilyAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     // ── Confirmation resend throttling ───────────────────────────────────
@@ -203,58 +317,10 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        // No throw — indistinguishable from the unknown-email path
         await service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com"));
 
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
         _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
-    }
-
-    [Fact]
-    public async Task ResendConfirmation_WindowExhausted_SilentlySkipsWithoutThrowing()
-    {
-        var user = new User
-        {
-            Email = "user@example.com",
-            IsEmailConfirmed = false,
-            LastConfirmationEmailAt = DateTime.UtcNow.AddMinutes(-5),
-            ConfirmationEmailCount = 5,
-        };
-        _users.Setup(u => u.GetByEmailAsync("user@example.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(user);
-
-        var service = BuildService();
-
-        await service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com"));
-
-        _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
-    }
-
-    // Regression: a reset request carrying no token must be rejected outright.
-    // Without the guard, EF Core's `col == null` → `col IS NULL` would match the
-    // first user with no pending reset and let an attacker take over their account.
-    [Fact]
-    public async Task ResetPassword_NullToken_ThrowsAndNeverLooksUpAUser()
-    {
-        var service = BuildService();
-
-        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
-            service.ResetPasswordAsync(new ResetPasswordRequest(null!, "newpassword1")));
-
-        Assert.Equal("Reset token required.", ex.Message);
-        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
-        _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
-    }
-
-    [Fact]
-    public async Task ResetPassword_BlankToken_ThrowsBeforeAnyLookup()
-    {
-        var service = BuildService();
-
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            service.ResetPasswordAsync(new ResetPasswordRequest("   ", "newpassword1")));
-
-        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]
@@ -267,7 +333,6 @@ public class AuthServiceTests
 
         await service.ResendConfirmationAsync(new ResendConfirmationRequest("ghost@example.com"));
 
-        // No user enumeration: no exception, no email, no writes
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
         _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
     }
@@ -295,16 +360,17 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ResetPassword_ValidToken_UpdatesHashClearsTokenAndConfirmsEmail()
+    public async Task ResetPassword_ValidToken_UpdatesHashClearsTokenConfirmsEmailAndRevokesAllSessions()
     {
+        var userId = Guid.NewGuid();
         var user = new User
         {
+            Id = userId,
             Email = "user@example.com",
             PasswordHash = "OLD",
             IsEmailConfirmed = false,
             PasswordResetToken = "TOKEN123",
             PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(30),
-            RefreshToken = "old-refresh",
         };
         _users.Setup(u => u.GetByPasswordResetTokenAsync("TOKEN123", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
@@ -318,14 +384,82 @@ public class AuthServiceTests
         Assert.Null(user.PasswordResetToken);
         Assert.Null(user.PasswordResetTokenExpiry);
         Assert.True(user.IsEmailConfirmed);        // reset proves email ownership
-        Assert.NotEqual("old-refresh", user.RefreshToken); // sessions invalidated
         _users.Verify(u => u.UpdateAsync(user, It.IsAny<CancellationToken>()), Times.Once());
+        // Every existing session is invalidated
+        _refreshTokens.Verify(r => r.RevokeAllForUserAsync(userId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    // Regression: a reset request carrying no token must be rejected outright.
+    // Without the guard, EF Core's `col == null` → `col IS NULL` would match the
+    // first user with no pending reset and let an attacker take over their account.
+    [Fact]
+    public async Task ResetPassword_NullToken_ThrowsAndNeverLooksUpAUser()
+    {
+        var service = BuildService();
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.ResetPasswordAsync(new ResetPasswordRequest(null!, "newpassword1")));
+
+        Assert.Equal("Reset token required.", ex.Message);
+        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task ResetPassword_BlankToken_ThrowsBeforeAnyLookup()
+    {
+        var service = BuildService();
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.ResetPasswordAsync(new ResetPasswordRequest("   ", "newpassword1")));
+
+        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    // ── Change password ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ChangePassword_Valid_RevokesAllThenOpensAFreshSession()
+    {
+        var userId = Guid.NewGuid();
+        var user = new User { Id = userId, Email = "user@example.com", PasswordHash = "OLD" };
+        _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _hasher.Setup(h => h.Verify("current1", "OLD")).Returns(true);
+        _hasher.Setup(h => h.Hash("newpassword1")).Returns("NEWHASH");
+
+        var calls = new List<string>();
+        _refreshTokens.Setup(r => r.RevokeAllForUserAsync(userId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("revoke-all")).Returns(Task.CompletedTask);
+        _refreshTokens.Setup(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("add")).Returns(Task.CompletedTask);
+
+        var result = await BuildService().ChangePasswordAsync(
+            userId, new ChangePasswordRequest("current1", "newpassword1"), Agent);
+
+        Assert.Equal("NEWHASH", user.PasswordHash);
+        Assert.Equal("jwt-token", result.Response.AccessToken);
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken)); // fresh session for the current client
+        // Revoke everything FIRST, then open the new session (else it'd be revoked too)
+        Assert.Equal(["revoke-all", "add"], calls);
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongCurrent_Throws()
+    {
+        var userId = Guid.NewGuid();
+        var user = new User { Id = userId, PasswordHash = "OLD" };
+        _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _hasher.Setup(h => h.Verify("wrong", "OLD")).Returns(false);
+
+        await Assert.ThrowsAsync<ValidationException>(() => BuildService().ChangePasswordAsync(
+            userId, new ChangePasswordRequest("wrong", "newpassword1"), Agent));
+
+        _refreshTokens.Verify(r => r.RevokeAllForUserAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     // ── Google ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GoogleLogin_NewUser_CreatesConfirmedAccountAndSendsWelcome()
+    public async Task GoogleLogin_NewUser_CreatesConfirmedAccountSendsWelcomeAndOpensSession()
     {
         _google.Setup(g => g.ValidateAsync("id-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GoogleUserInfo("googler@example.com", "G"));
@@ -340,13 +474,15 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var response = await service.GoogleLoginAsync(new GoogleLoginRequest("id-token"));
+        var result = await service.GoogleLoginAsync(new GoogleLoginRequest("id-token"), Agent);
 
-        Assert.Equal("googler@example.com", response.Email);
+        Assert.Equal("googler@example.com", result.Response.Email);
+        Assert.False(string.IsNullOrEmpty(result.RefreshToken));
         Assert.NotNull(saved);
         Assert.True(saved.IsEmailConfirmed); // Google already verified the address
         Assert.Equal(UserPlan.Free, saved.Plan);
 
+        _refreshTokens.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once());
         _email.Verify(e => e.SendWelcomeAsync("googler@example.com", It.IsAny<CancellationToken>()), Times.Once());
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }

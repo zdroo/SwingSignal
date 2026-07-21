@@ -176,7 +176,6 @@ public class StripeWebhookTests
         public Task UpdateAsync(User user, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task<User?> GetByEmailAsync(string email, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<User?> GetByRefreshTokenAsync(string t, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<User?> GetByEmailConfirmationTokenAsync(string t, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<User?> GetByPasswordResetTokenAsync(string t, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> DeleteUnconfirmedOlderThanAsync(DateTime c, CancellationToken ct = default) => throw new NotSupportedException();
