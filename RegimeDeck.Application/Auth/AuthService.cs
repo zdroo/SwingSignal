@@ -12,7 +12,9 @@ namespace RegimeDeck.Application.Auth;
 
 public class AuthService : IAuthService
 {
-    private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30);
+    // Matches the access-token lifetime (1 year) so the refresh token is never
+    // the reason a session ends — maximum login persistence.
+    private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(365);
     private static readonly TimeSpan ConfirmationTokenLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan ResetTokenLifetime = TimeSpan.FromHours(1);
 
