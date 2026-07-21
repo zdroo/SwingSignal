@@ -23,6 +23,12 @@ public class MacroController : ControllerBase
         if (!Enum.TryParse<MacroIndicatorType>(indicatorType, true, out var parsedType))
             return BadRequest($"Invalid indicator. Valid values: {string.Join(", ", Enum.GetNames<MacroIndicatorType>())}");
 
+        // Bound the page size: a negative limit becomes TOP(-1) -> SqlException on
+        // SQL Server, and an unbounded one dumps an indicator's whole history in a
+        // single public response. 5000 covers full daily history for any indicator.
+        if (limit is < 1 or > 5000)
+            return BadRequest("limit must be between 1 and 5000");
+
         var points = await _macro.GetHistoryAsync(parsedType, limit, ct);
 
         if (points.Count == 0)

@@ -153,6 +153,20 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
             $"POST /api/assets should not be a valid write endpoint, got {(int)response.StatusCode}");
     }
 
+    // A negative limit becomes TOP(-1) -> SqlException (500) on SQL Server; an
+    // unbounded one dumps a whole indicator history. Both must be clean 400s.
+    // An unknown indicator name is a 400 too.
+    [Theory]
+    [InlineData("/api/macro/GDP?limit=-1")]
+    [InlineData("/api/macro/GDP?limit=0")]
+    [InlineData("/api/macro/GDP?limit=999999")]
+    [InlineData("/api/macro/NotARealIndicator")]
+    public async Task MacroHistory_BadInput_400(string url)
+    {
+        var response = await _client.GetAsync(url);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // ── Access gates ─────────────────────────────────────────────────────
 
     [Fact]
