@@ -155,13 +155,16 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
 
     // A negative limit becomes TOP(-1) -> SqlException (500) on SQL Server; an
     // unbounded one dumps a whole indicator history. Both must be clean 400s.
-    // An unknown indicator name is a 400 too.
+    // An unknown indicator name is a 400 too. Same for the candles page size.
     [Theory]
     [InlineData("/api/macro/GDP?limit=-1")]
     [InlineData("/api/macro/GDP?limit=0")]
     [InlineData("/api/macro/GDP?limit=999999")]
     [InlineData("/api/macro/NotARealIndicator")]
-    public async Task MacroHistory_BadInput_400(string url)
+    [InlineData("/api/candles/BTCUSDT?limit=-1")]
+    [InlineData("/api/candles/BTCUSDT?limit=999999")]
+    [InlineData("/api/candles/BTCUSDT?interval=NotAnInterval")]
+    public async Task ReadEndpoints_BadInput_400(string url)
     {
         var response = await _client.GetAsync(url);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

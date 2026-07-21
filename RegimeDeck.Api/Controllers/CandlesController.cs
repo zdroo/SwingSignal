@@ -22,6 +22,12 @@ public class CandlesController : ControllerBase
         if (!Enum.TryParse<CandleInterval>(interval, true, out var parsedInterval))
             return BadRequest($"Invalid interval. Valid values: {string.Join(", ", Enum.GetNames<CandleInterval>())}");
 
+        // Bound the page size: a negative limit becomes TOP(-1) -> SqlException on
+        // SQL Server. 20000 gives headroom over the client's full-history request
+        // (10000) — ~55 years of daily candles, more than any asset has.
+        if (limit is < 1 or > 20000)
+            return BadRequest("limit must be between 1 and 20000");
+
         var candles = await _candles.GetAsync(symbol, parsedInterval, limit, ct);
 
         if (candles.Count == 0)
