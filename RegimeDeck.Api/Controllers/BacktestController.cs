@@ -56,6 +56,22 @@ public class BacktestController : ControllerBase
         if (hasResearchParams)
             _pro.RequirePro(User.IsPro(), "Custom backtest parameters are a Pro feature.");
 
+        // Guard the research knobs: the model binder happily parses "NaN"/"Infinity"
+        // into a double, and unbounded values crash downstream — a NaN weight
+        // serializes to invalid JSON (500) and a huge baseRateYears overflows
+        // DateTime.AddYears (500). Reject them cleanly instead.
+        if (BadDouble(stateH)) return BadRequest("stateH must be a finite value >= 0");
+        if (BadDouble(cycleH)) return BadRequest("cycleH must be a finite value >= 0");
+        if (BadDouble(shrinkM)) return BadRequest("shrinkM must be a finite value >= 0");
+        if (baseRateYears is < 0 or > 200)
+            return BadRequest("baseRateYears must be between 0 and 200");
+        if (fromYear is < 1900 or > 2100)
+            return BadRequest("fromYear must be between 1900 and 2100");
+        if (toYear is < 1900 or > 2100)
+            return BadRequest("toYear must be between 1900 and 2100");
+        if (fromYear is int fy && toYear is int ty && fy > ty)
+            return BadRequest("fromYear must not be after toYear");
+
         var normalized = SymbolNormalizer.Normalize(symbol);
 
         var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
@@ -88,4 +104,9 @@ public class BacktestController : ControllerBase
 
         return Ok(await _backtest.CompareAsync(normalized, days, topK, null, null, ct));
     }
+
+    // A supplied research knob must be a real, non-negative number. Rejects the
+    // model binder's NaN/±Infinity parses and negatives that produce garbage odds.
+    private static bool BadDouble(double? value) =>
+        value is double d && (!double.IsFinite(d) || d < 0);
 }

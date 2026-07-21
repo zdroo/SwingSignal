@@ -188,6 +188,27 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // The model binder parses "NaN"/"Infinity" into a double, and an unbounded
+    // baseRateYears overflows DateTime.AddYears. Both used to reach the engine and
+    // 500 (invalid-JSON NaN / ArgumentOutOfRange). They must be clean 400s now.
+    // (Pro flag is off in this factory, so research params aren't gated here.)
+    [Theory]
+    [InlineData("stateH=NaN")]
+    [InlineData("cycleH=Infinity")]
+    [InlineData("shrinkM=-1")]
+    [InlineData("baseRateYears=100000")]
+    [InlineData("fromYear=50000")]
+    public async Task Backtest_MalformedResearchParam_400_NotAServerError(string param)
+    {
+        var (_, token) = await RegisterAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/backtest/SPY?{param}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task UsersMe_WithoutToken_401()
     {
