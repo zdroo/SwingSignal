@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
+using RegimeDeck.Application.Abstractions.Billing;
 using RegimeDeck.Application.Abstractions.Email;
 using RegimeDeck.Application.Common;
 using RegimeDeck.Application.Abstractions.Persistence;
@@ -26,6 +27,7 @@ public class AuthService : IAuthService
     private readonly IGoogleTokenValidator _google;
     private readonly IEmailService _email;
     private readonly IAnalyticsRepository _analytics;
+    private readonly IBillingService _billing;
     private readonly string _frontendUrl;
 
     public AuthService(
@@ -35,6 +37,7 @@ public class AuthService : IAuthService
         IGoogleTokenValidator google,
         IEmailService email,
         IAnalyticsRepository analytics,
+        IBillingService billing,
         IConfiguration config)
     {
         _users = users;
@@ -43,6 +46,7 @@ public class AuthService : IAuthService
         _google = google;
         _email = email;
         _analytics = analytics;
+        _billing = billing;
         _frontendUrl = config["Frontend:Url"] ?? "http://localhost:3000";
     }
 
@@ -282,6 +286,11 @@ public class AuthService : IAuthService
     {
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new NotFoundException("Account not found.");
+
+        // Stop billing before the account disappears — otherwise a deleted Pro
+        // user keeps getting charged with no account left to manage it. Best-effort
+        // (logs, never throws) so a Stripe outage can't block the user's deletion.
+        await _billing.CancelSubscriptionAsync(userId, ct);
 
         // GDPR: unlink search history first, then remove the account
         await _analytics.DetachUserAsync(userId, ct);

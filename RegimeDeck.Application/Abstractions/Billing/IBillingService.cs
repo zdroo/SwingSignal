@@ -12,4 +12,10 @@ public interface IBillingService
 
     /// Verifies and applies a provider webhook event.
     Task HandleWebhookAsync(string payload, string signature, CancellationToken ct = default);
+
+    /// Cancels the user's active subscription at the provider, if any. Best-effort
+    /// and idempotent: a no-op when the user has no subscription, and it logs and
+    /// swallows provider errors rather than throwing — it is called during account
+    /// deletion, which must never be blocked by a billing-provider outage.
+    Task CancelSubscriptionAsync(Guid userId, CancellationToken ct = default);
 }

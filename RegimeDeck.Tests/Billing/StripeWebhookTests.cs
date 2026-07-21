@@ -145,6 +145,22 @@ public class StripeWebhookTests
         Assert.Equal(UserPlan.Pro, user.Plan);
     }
 
+    // A Free user with no subscription must be a clean no-op: no Stripe client is
+    // ever built (this service has no secret key), so reaching Stripe would throw.
+    [Fact]
+    public async Task CancelSubscription_NoSubscription_IsANoOp()
+    {
+        var user = new User { Id = Guid.NewGuid(), Email = "u@test.local", Plan = UserPlan.Free };
+        var repo = new StubUserRepository(user);
+        var service = new StripeBillingService(
+            repo,
+            new ConfigurationBuilder().Build(), // no Stripe keys at all
+            NullLogger<StripeBillingService>.Instance);
+
+        // Does not throw despite no configuration — it returns before any Stripe call
+        await service.CancelSubscriptionAsync(user.Id);
+    }
+
     // Minimal repo: only the members StripeBillingService touches are real.
     private sealed class StubUserRepository : IUserRepository
     {

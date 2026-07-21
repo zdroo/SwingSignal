@@ -165,6 +165,39 @@ public class StripeBillingService : IBillingService
             "User {UserId} plan set to {Plan} (subscription {Status})", user.Id, plan, subscription.Status);
     }
 
+    public async Task CancelSubscriptionAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _users.GetByIdAsync(userId, ct);
+        if (user is null || string.IsNullOrWhiteSpace(user.StripeSubscriptionId))
+            return; // nothing to cancel
+
+        if (string.IsNullOrWhiteSpace(_secretKey))
+        {
+            // No Stripe configured but a subscription id exists — shouldn't happen,
+            // but log loudly so it can't silently keep billing after deletion.
+            _logger.LogError(
+                "Cannot cancel subscription {SubId} for user {UserId}: Stripe is not configured",
+                user.StripeSubscriptionId, userId);
+            return;
+        }
+
+        try
+        {
+            await new SubscriptionService(new StripeClient(_secretKey))
+                .CancelAsync(user.StripeSubscriptionId, cancellationToken: ct);
+            _logger.LogInformation(
+                "Cancelled subscription {SubId} for user {UserId}", user.StripeSubscriptionId, userId);
+        }
+        catch (StripeException ex)
+        {
+            // Best-effort: never block account deletion on a billing-provider error.
+            // Logged at error level so a failed cancel (continued billing) is caught.
+            _logger.LogError(ex,
+                "Failed to cancel subscription {SubId} for user {UserId} during account deletion",
+                user.StripeSubscriptionId, userId);
+        }
+    }
+
     private StripeClient RequireClient() =>
         string.IsNullOrWhiteSpace(_secretKey)
             ? throw new ValidationException("Billing is not configured.")

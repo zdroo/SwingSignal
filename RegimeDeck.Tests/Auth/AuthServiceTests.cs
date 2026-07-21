@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Moq;
+using RegimeDeck.Application.Abstractions.Billing;
 using RegimeDeck.Application.Abstractions.Email;
 using RegimeDeck.Application.Abstractions.Persistence;
 using RegimeDeck.Application.Abstractions.Security;
@@ -19,6 +20,7 @@ public class AuthServiceTests
     private readonly Mock<IGoogleTokenValidator> _google = new();
     private readonly Mock<IEmailService> _email = new();
     private readonly Mock<IAnalyticsRepository> _analytics = new();
+    private readonly Mock<IBillingService> _billing = new();
 
     private AuthService BuildService()
     {
@@ -34,7 +36,7 @@ public class AuthServiceTests
 
         return new AuthService(
             _users.Object, _hasher.Object, _tokens.Object, _google.Object, _email.Object,
-            _analytics.Object, config);
+            _analytics.Object, _billing.Object, config);
     }
 
     [Fact]
@@ -45,8 +47,13 @@ public class AuthServiceTests
         _users.Setup(u => u.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // GDPR ordering: history must be unlinked before the account row disappears
+        // Ordering: cancel billing and unlink history BEFORE the account row
+        // disappears. Cancel-first stops charges; detach-before-delete is the
+        // GDPR requirement.
         var calls = new List<string>();
+        _billing.Setup(b => b.CancelSubscriptionAsync(userId, It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("cancel"))
+            .Returns(Task.CompletedTask);
         _analytics.Setup(a => a.DetachUserAsync(userId, It.IsAny<CancellationToken>()))
             .Callback(() => calls.Add("detach"))
             .Returns(Task.CompletedTask);
@@ -56,7 +63,7 @@ public class AuthServiceTests
 
         await BuildService().DeleteAccountAsync(userId);
 
-        Assert.Equal(["detach", "delete"], calls);
+        Assert.Equal(["cancel", "detach", "delete"], calls);
     }
 
     [Fact]
