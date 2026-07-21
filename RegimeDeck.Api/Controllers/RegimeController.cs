@@ -14,8 +14,11 @@ namespace RegimeDeck.Api.Controllers;
 public class RegimeController : ControllerBase
 {
     // Odds for these are free without an account — the landing page teaser tier
+    // ("BTC, SPY and Gold are free without an account"). GLD (the ETF) is the
+    // ticker actually surfaced to anonymous visitors (popular chips, sitemap);
+    // GC=F (futures) is kept too since it was already granted.
     private static readonly HashSet<string> FlagshipSymbols =
-        new(StringComparer.OrdinalIgnoreCase) { "BTCUSDT", "SPY", "GC=F" };
+        new(StringComparer.OrdinalIgnoreCase) { "BTCUSDT", "SPY", "GLD", "GC=F" };
 
     private readonly IMacroRegimeService _regime;
     private readonly IHistoricalOddsService _odds;

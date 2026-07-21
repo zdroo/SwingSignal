@@ -21,8 +21,14 @@ public class MacroRegimeService : IMacroRegimeService
 
         foreach (var type in MacroSnapshotBuilder.VectorIndicators)
         {
-            // Load ~14 months so YoY indicators have a year-ago baseline
-            var cutoff = DateTime.UtcNow.AddDays(-430);
+            // A YoY series needs the current month AND its year-ago baseline
+            // inside the fetched window. A 14-month window (the old value)
+            // left under 2 months of margin between "now" and "cutoff+12mo" —
+            // any indicator whose latest release lags "now" by more than that
+            // (GDP's quarterly cadence, PCE/M2's ~4-6 week publication lag)
+            // silently vanished from the current regime every single month,
+            // not just transiently. ~20 months gives ~8 months of margin.
+            var cutoff = DateTime.UtcNow.AddDays(-600);
             var points = await _macro.GetSinceAsync(type, cutoff, ct);
 
             if (points.Count == 0) continue;
