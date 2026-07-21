@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace RegimeDeck.Tests.Integration;
 
@@ -11,11 +12,19 @@ namespace RegimeDeck.Tests.Integration;
 public class ApiIntegrationTests : IClassFixture<ApiFactory>
 {
     private readonly HttpClient _client;
+    private readonly ApiFactory _factory;
 
     public ApiIntegrationTests(ApiFactory factory)
     {
         factory.EnsureSchema();
+        _factory = factory;
         _client = factory.CreateClient();
+    }
+
+    private static string RefreshCookieValue(HttpResponseMessage res)
+    {
+        var setCookie = res.Headers.GetValues("Set-Cookie").First(c => c.StartsWith("rd_refresh=", StringComparison.Ordinal));
+        return setCookie["rd_refresh=".Length..].Split(';')[0];
     }
 
     private static string UniqueEmail() => $"it-{Guid.NewGuid():N}@test.local";
@@ -309,6 +318,42 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         using var refreshDoc = JsonDocument.Parse(await refresh.Content.ReadAsStringAsync());
         Assert.Equal(email, refreshDoc.RootElement.GetProperty("email").GetString());
         Assert.False(string.IsNullOrEmpty(refreshDoc.RootElement.GetProperty("accessToken").GetString()));
+    }
+
+    // Reuse detection through the real pipeline: replaying a refresh token that
+    // was already rotated away is treated as theft and revokes the whole family,
+    // so even the current (legitimate) token dies. Manual cookie control
+    // (HandleCookies = false) so we can replay the OLD token after rotation — the
+    // default client's cookie jar would have already overwritten it.
+    [Fact]
+    public async Task RefreshTokenReuse_RevokesTheWholeFamily()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+
+        var register = await client.PostAsJsonAsync("/api/auth/register",
+            new { email = UniqueEmail(), password = "integration-pass-1" });
+        var original = RefreshCookieValue(register);
+
+        // Rotate: refresh with the original token yields a new one
+        var rotated = await SendRefresh(client, original);
+        Assert.Equal(HttpStatusCode.OK, rotated.StatusCode);
+        var current = RefreshCookieValue(rotated);
+        Assert.NotEqual(original, current);
+
+        // Replay the ORIGINAL (now-revoked) token → theft signal → 401
+        var replay = await SendRefresh(client, original);
+        Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
+
+        // The reuse revoked the whole family, so the current token is dead too
+        var afterwards = await SendRefresh(client, current);
+        Assert.Equal(HttpStatusCode.Unauthorized, afterwards.StatusCode);
+    }
+
+    private static Task<HttpResponseMessage> SendRefresh(HttpClient client, string cookieValue)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
+        req.Headers.Add("Cookie", $"rd_refresh={cookieValue}");
+        return client.SendAsync(req);
     }
 
     [Fact]
