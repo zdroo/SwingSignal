@@ -92,6 +92,30 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.Equal("This confirmation link is invalid or has expired.", await MessageOf(response));
     }
 
+    // Account-takeover regression. A reset request with no token must be
+    // rejected and must NOT change anyone's password. Before the fix, EF Core's
+    // `PasswordResetToken == null` → `IS NULL` matched the first user without a
+    // pending reset (a freshly-registered account) and the null expiry check
+    // passed too, letting an attacker set that user's password.
+    [Fact]
+    public async Task ResetPassword_NullToken_400_AndVictimPasswordUnchanged()
+    {
+        var (email, _) = await RegisterAsync(); // fresh user: PasswordResetToken is null
+
+        var attack = await _client.PostAsJsonAsync("/api/auth/reset-password",
+            new { token = (string?)null, newPassword = "attacker-chosen-1" });
+        Assert.Equal(HttpStatusCode.BadRequest, attack.StatusCode);
+
+        // The victim's original password still works; the attacker's does not
+        var hijack = await _client.PostAsJsonAsync("/api/auth/login",
+            new { email, password = "attacker-chosen-1" });
+        Assert.Equal(HttpStatusCode.Unauthorized, hijack.StatusCode);
+
+        var legit = await _client.PostAsJsonAsync("/api/auth/login",
+            new { email, password = "integration-pass-1" });
+        Assert.Equal(HttpStatusCode.OK, legit.StatusCode);
+    }
+
     [Fact]
     public async Task Waitlist_InvalidEmail_400_ValidEmail_200()
     {

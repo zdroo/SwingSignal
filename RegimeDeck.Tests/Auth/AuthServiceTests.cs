@@ -178,8 +178,11 @@ public class AuthServiceTests
 
     // ── Confirmation resend throttling ───────────────────────────────────
 
+    // Throttling must be SILENT on this enumeration-safe endpoint: a 429 for a
+    // real (throttled) account vs a 200 for an unknown email would reveal which
+    // addresses are registered. So a throttled resend is a no-op, not a throw.
     [Fact]
-    public async Task ResendConfirmation_WithinCooldown_ThrowsAndSendsNothing()
+    public async Task ResendConfirmation_WithinCooldown_SilentlySkipsWithoutThrowing()
     {
         var user = new User
         {
@@ -193,15 +196,15 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
-            service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com")));
+        // No throw — indistinguishable from the unknown-email path
+        await service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com"));
 
-        Assert.Equal("Please wait a minute before requesting another email.", ex.Message);
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+        _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]
-    public async Task ResendConfirmation_WindowExhausted_ThrowsHourlyMessage()
+    public async Task ResendConfirmation_WindowExhausted_SilentlySkipsWithoutThrowing()
     {
         var user = new User
         {
@@ -215,10 +218,36 @@ public class AuthServiceTests
 
         var service = BuildService();
 
-        var ex = await Assert.ThrowsAsync<RateLimitedException>(() =>
-            service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com")));
+        await service.ResendConfirmationAsync(new ResendConfirmationRequest("user@example.com"));
 
-        Assert.Equal("Too many emails requested. Please try again in an hour.", ex.Message);
+        _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    // Regression: a reset request carrying no token must be rejected outright.
+    // Without the guard, EF Core's `col == null` → `col IS NULL` would match the
+    // first user with no pending reset and let an attacker take over their account.
+    [Fact]
+    public async Task ResetPassword_NullToken_ThrowsAndNeverLooksUpAUser()
+    {
+        var service = BuildService();
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.ResetPasswordAsync(new ResetPasswordRequest(null!, "newpassword1")));
+
+        Assert.Equal("Reset token required.", ex.Message);
+        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+        _users.Verify(u => u.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [Fact]
+    public async Task ResetPassword_BlankToken_ThrowsBeforeAnyLookup()
+    {
+        var service = BuildService();
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.ResetPasswordAsync(new ResetPasswordRequest("   ", "newpassword1")));
+
+        _users.Verify(u => u.GetByPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]

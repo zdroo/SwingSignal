@@ -172,7 +172,9 @@ public class AuthService : IAuthService
         // Never reveal whether the email exists
         if (user is null || user.IsEmailConfirmed) return;
 
-        ThrowIfEmailThrottled(user.LastConfirmationEmailAt, user.ConfirmationEmailCount);
+        // Silently skip when throttled — see IsEmailThrottled for why we must not
+        // surface a distinguishable error on this enumeration-safe endpoint.
+        if (IsEmailThrottled(user.LastConfirmationEmailAt, user.ConfirmationEmailCount)) return;
 
         var token = IssueConfirmationToken(user);
         await _users.UpdateAsync(user, ct);
@@ -187,7 +189,9 @@ public class AuthService : IAuthService
         // Never reveal whether the email exists
         if (user is null) return;
 
-        ThrowIfEmailThrottled(user.LastPasswordResetEmailAt, user.PasswordResetEmailCount);
+        // Silently skip when throttled — a distinguishable error here would leak
+        // that the address is registered (see IsEmailThrottled).
+        if (IsEmailThrottled(user.LastPasswordResetEmailAt, user.PasswordResetEmailCount)) return;
 
         var now = DateTime.UtcNow;
         if (user.LastPasswordResetEmailAt is null || now - user.LastPasswordResetEmailAt > EmailWindow)
@@ -205,6 +209,9 @@ public class AuthService : IAuthService
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(request.Token))
+            throw new ValidationException("Reset token required.");
+
         if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
             throw new ValidationException("Password must be at least 8 characters.");
 
@@ -305,18 +312,21 @@ public class AuthService : IAuthService
         return user.EmailConfirmationToken;
     }
 
-    // 60s between emails, max 5 per rolling hour — per account, on top of IP rate limits
-    private static void ThrowIfEmailThrottled(DateTime? lastAt, int count)
+    // 60s between emails, max 5 per rolling hour — per account, on top of IP rate
+    // limits. Returns true when the send should be silently skipped. This must NOT
+    // throw: resend-confirmation and forgot-password are enumeration-safe endpoints
+    // that always answer 200, so a distinguishable 429 for a registered address
+    // (vs 200 for an unknown one) would itself reveal which emails have accounts.
+    private static bool IsEmailThrottled(DateTime? lastAt, int count)
     {
-        if (lastAt is null) return;
+        if (lastAt is null) return false;
 
         var elapsed = DateTime.UtcNow - lastAt.Value;
 
-        if (elapsed < EmailCooldown)
-            throw new RateLimitedException("Please wait a minute before requesting another email.");
+        if (elapsed < EmailCooldown) return true;
+        if (elapsed < EmailWindow && count >= MaxEmailsPerWindow) return true;
 
-        if (elapsed < EmailWindow && count >= MaxEmailsPerWindow)
-            throw new RateLimitedException("Too many emails requested. Please try again in an hour.");
+        return false;
     }
 
     private static string NewToken() =>
