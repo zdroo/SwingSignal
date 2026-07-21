@@ -127,6 +127,29 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, good.StatusCode);
     }
 
+    // Re-joining the waitlist is common (people forget) — the unique-email index
+    // must not surface as a 500; a repeat is an idempotent 200.
+    [Fact]
+    public async Task Waitlist_DuplicateEmail_IdempotentOk()
+    {
+        var email = UniqueEmail();
+        var first = await _client.PostAsJsonAsync("/api/waitlist", new { email });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await _client.PostAsJsonAsync("/api/waitlist", new { email });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+    }
+
+    // A body missing its required field must be a framework 400, never a 500 from
+    // dereferencing a null. Nullable is enabled project-wide, so [ApiController]
+    // treats the non-nullable Email as required — pin that it actually holds.
+    [Fact]
+    public async Task Waitlist_MissingEmailField_400_NotNullReference()
+    {
+        var response = await _client.PostAsJsonAsync("/api/waitlist", new { source = "x" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Odds_UnsupportedSymbol_503()
     {
