@@ -139,6 +139,20 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
+    // Assets are created only through validated on-demand ingestion. The old
+    // anonymous POST /api/assets (arbitrary attacker-controlled symbol/name into
+    // a table the public GetAll serves) was removed — it must not accept writes.
+    [Fact]
+    public async Task CreateAsset_EndpointRemoved_NotWritable()
+    {
+        var response = await _client.PostAsJsonAsync("/api/assets",
+            new { symbol = "EVILCO", name = "<script>", marketType = "Stock" });
+
+        Assert.True(
+            response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed,
+            $"POST /api/assets should not be a valid write endpoint, got {(int)response.StatusCode}");
+    }
+
     // ── Access gates ─────────────────────────────────────────────────────
 
     [Fact]

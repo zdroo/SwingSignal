@@ -18,16 +18,4 @@ public class AssetRepository : IAssetRepository
         var upper = symbol.ToUpperInvariant();
         return _context.Assets.FirstOrDefaultAsync(a => a.Symbol == upper, ct);
     }
-
-    public Task<bool> ExistsAsync(string symbol, CancellationToken ct = default)
-    {
-        var upper = symbol.ToUpperInvariant();
-        return _context.Assets.AnyAsync(a => a.Symbol == upper, ct);
-    }
-
-    public async Task AddAsync(Asset asset, CancellationToken ct = default)
-    {
-        _context.Assets.Add(asset);
-        await _context.SaveChangesAsync(ct);
-    }
 }

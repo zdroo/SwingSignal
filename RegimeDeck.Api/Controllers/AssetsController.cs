@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using RegimeDeck.Application.Abstractions.Ingestion;
 using RegimeDeck.Application.Markets;
 using RegimeDeck.Contracts.Assets;
-using RegimeDeck.Domain.Enums;
 
 namespace RegimeDeck.Api.Controllers;
 
@@ -45,17 +44,4 @@ public class AssetsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) =>
         Ok(await _catalog.GetAllActiveAsync(ct));
-
-    [HttpPost]
-    public async Task<IActionResult> Create(CreateAssetRequest request, CancellationToken ct)
-    {
-        if (!Enum.TryParse<MarketType>(request.MarketType, true, out var marketType))
-            return BadRequest($"Invalid MarketType. Valid values: {string.Join(", ", Enum.GetNames<MarketType>())}");
-
-        var created = await _catalog.CreateAsync(request.Symbol, request.Name, marketType, ct);
-
-        return created is null
-            ? Conflict($"Asset {request.Symbol.ToUpperInvariant()} already exists")
-            : CreatedAtAction(nameof(GetAll), created);
-    }
 }
