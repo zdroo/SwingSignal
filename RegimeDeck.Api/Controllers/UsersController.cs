@@ -25,7 +25,11 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
     {
         await _auth.ChangePasswordAsync(User.RequireUserId(), request, ct);
-        return Ok(new { message = "Password updated. Other sessions have been signed out." });
+        // Don't claim other sessions are signed out: access tokens are stateless
+        // 7-day JWTs, so rotating the refresh token only stops them refreshing —
+        // existing access tokens keep working until they expire. (Pre-launch
+        // hardening: shorten access tokens / add revocation before public launch.)
+        return Ok(new { message = "Password updated." });
     }
 
     public record WeeklyReportRequest(bool Enabled);
