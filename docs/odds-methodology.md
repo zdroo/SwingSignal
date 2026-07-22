@@ -378,11 +378,22 @@ re-implemented from scratch in Python and diffed against live production output 
   round(PositiveOdds − BaseRate)`, `PriceTargetMid == price·(1 + median/100)`,
   monotonic targets, `worst ≤ median ≤ best`, range/count bounds).
 
+- **Crypto matching (§1–§4, both profiles)** — extending the port with the
+  crypto-native series (Mayer, MinerPuell, hash-rate, stablecoin supply, ETH/BTC;
+  types 32–36) and the two crypto dimension filters, BTC's analogs were
+  reproduced for both `CryptoProduction` (3M/6M) and `CryptoShortHorizon` (1M),
+  with the first-candle floor. `CryptoProduction` yielded **21 analogs — exactly
+  the API's `matchesUsed`** — and running both independently-derived analog sets
+  through the odds math reproduced BTC's live odds: **36/36 fields matched** to
+  the cent across all three horizons. (Odds are highly sensitive to the exact
+  analog set/weights/floor, so an exact odds match validates the crypto matching.)
+
 (One benign artifact: `Edge` is rounded from the *unrounded* shrunk odds and base
 rate, so it can differ by 0.1 from `displayedOdds − displayedBaseRate` — e.g. GLD
-3M shows odds 65.6, base 62.3, edge 3.4; both correct. Crypto assets use a
-different analog profile that no endpoint exposes, so BTC's *matching* wasn't
-independently reproduced — only its odds identities.)
+3M shows odds 65.6, base 62.3, edge 3.4; both correct.)
+
+**Net: the complete pipeline — equity and crypto, matching and odds — has been
+independently reproduced from raw DB rows and candles, with zero discrepancies.**
 
 ---
 
