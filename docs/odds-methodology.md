@@ -359,6 +359,15 @@ target and backtest metric matches its intended formula, and the shared-engine
 design keeps them consistent across pages. The ⚠ items below are correct-but-worth-
 knowing interpretation points, not bugs.
 
+**Live cross-check (2026-07-22):** the formula identities were verified against
+live production output for SPY, BTCUSDT and GLD × three horizons — **45/45**
+checks passed to the cent/decimal: `Edge == round(PositiveOdds − BaseRate)`,
+`PriceTargetMid == currentPrice·(1 + MedianReturn/100)`, `P25 ≤ P50 ≤ P75`,
+`worst ≤ median ≤ best`, and all range/count bounds. (Note: `Edge` is rounded
+from the *unrounded* shrunk odds and base rate, so it can differ by 0.1 from
+`displayedOdds − displayedBaseRate` — a double-rounding artifact, e.g. GLD 3M
+shows odds 65.6, base 62.3, edge 3.4; both are correct.)
+
 ---
 
 ## Part V — Caveats worth surfacing (all intentional)
