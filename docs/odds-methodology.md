@@ -359,14 +359,30 @@ target and backtest metric matches its intended formula, and the shared-engine
 design keeps them consistent across pages. The ⚠ items below are correct-but-worth-
 knowing interpretation points, not bugs.
 
-**Live cross-check (2026-07-22):** the formula identities were verified against
-live production output for SPY, BTCUSDT and GLD × three horizons — **45/45**
-checks passed to the cent/decimal: `Edge == round(PositiveOdds − BaseRate)`,
-`PriceTargetMid == currentPrice·(1 + MedianReturn/100)`, `P25 ≤ P50 ≤ P75`,
-`worst ≤ median ≤ best`, and all range/count bounds. (Note: `Edge` is rounded
-from the *unrounded* shrunk odds and base rate, so it can differ by 0.1 from
-`displayedOdds − displayedBaseRate` — a double-rounding artifact, e.g. GLD 3M
-shows odds 65.6, base 62.3, edge 3.4; both are correct.)
+**Independent end-to-end reproduction (2026-07-22).** The full pipeline was
+re-implemented from scratch in Python and diffed against live production output —
+**every number matched exactly**:
+
+- **Matching (§1–§4)** — from the raw macro rows (103k points, DB), the Python
+  port rebuilt monthly snapshots, YoY/momentum transforms, z-score normalisation,
+  family-weighted distance, similarity and declustered selection, and reproduced
+  the engine's analog list for SPY: **40/40 analogs matched** — same dates *and*
+  same similarity scores (to 0.1), in the same order (439 snapshots, 421
+  candidates).
+- **Odds math (§5–§11)** — from the raw daily candles plus that analog list, the
+  Python port recomputed kernel weights → forward returns → raw odds → shrinkage →
+  edge → weighted percentiles → price targets → base rate for SPY and GLD across
+  all three horizons: **72/72 fields matched to the last decimal/cent** (odds,
+  base rate, edge, average/median/best/worst return, P25/P50/P75 targets, counts).
+- **Identity spot-checks** — SPY/BTC/GLD × 3 horizons: **45/45** (`Edge ==
+  round(PositiveOdds − BaseRate)`, `PriceTargetMid == price·(1 + median/100)`,
+  monotonic targets, `worst ≤ median ≤ best`, range/count bounds).
+
+(One benign artifact: `Edge` is rounded from the *unrounded* shrunk odds and base
+rate, so it can differ by 0.1 from `displayedOdds − displayedBaseRate` — e.g. GLD
+3M shows odds 65.6, base 62.3, edge 3.4; both correct. Crypto assets use a
+different analog profile that no endpoint exposes, so BTC's *matching* wasn't
+independently reproduced — only its odds identities.)
 
 ---
 
