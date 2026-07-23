@@ -165,8 +165,9 @@ public class AuthService : IAuthService
                 IsEmailConfirmed = true
             };
 
+            // No email here: Google accounts are already confirmed, and the
+            // welcome content now lives in the confirmation email (email signups only).
             await _users.AddAsync(user, ct);
-            await _email.SendWelcomeAsync(user.Email, ct);
         }
         else if (!user.IsEmailConfirmed)
         {
@@ -187,15 +188,12 @@ public class AuthService : IAuthService
         if (user is null || user.EmailConfirmationTokenExpiry < DateTime.UtcNow)
             throw new ValidationException("This confirmation link is invalid or has expired.");
 
-        var firstConfirmation = !user.IsEmailConfirmed;
-
         user.IsEmailConfirmed = true;
         user.EmailConfirmationToken = null;
         user.EmailConfirmationTokenExpiry = null;
         await _users.UpdateAsync(user, ct);
-
-        if (firstConfirmation)
-            await _email.SendWelcomeAsync(user.Email, ct);
+        // No welcome email — it's folded into the confirmation email the user
+        // just acted on.
     }
 
     public async Task ResendConfirmationAsync(ResendConfirmationRequest request, CancellationToken ct = default)

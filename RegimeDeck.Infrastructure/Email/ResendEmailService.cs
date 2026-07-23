@@ -10,7 +10,6 @@ public class ResendEmailService : IEmailService
     private readonly IResend _resend;
     private readonly ILogger<ResendEmailService> _logger;
     private readonly string _from;
-    private readonly string _frontendUrl;
     private readonly string? _devRedirectTo;
 
     public ResendEmailService(IResend resend, IConfiguration configuration, ILogger<ResendEmailService> logger)
@@ -18,30 +17,21 @@ public class ResendEmailService : IEmailService
         _resend = resend;
         _logger = logger;
         _from = configuration["Resend:From"] ?? "RegimeDeck <onboarding@resend.dev>";
-        _frontendUrl = configuration["Frontend:Url"] ?? "http://localhost:3000";
         // Resend's sandbox sender only delivers to the account owner —
         // set Resend:DevRedirectTo in dev so all mail lands in your inbox.
         _devRedirectTo = configuration["Resend:DevRedirectTo"];
     }
 
-    public async Task SendWelcomeAsync(string toEmail, CancellationToken ct = default)
-    {
-        var body = $"""
-            <h2 style="margin:0 0 12px;font-size:22px;color:#18181b;">Welcome to RegimeDeck 📈</h2>
-            <p style="margin:0 0 16px;color:#52525b;">Your account is ready. You can now analyze any symbol, use custom prediction windows, and run backtests.</p>
-            <p style="margin:0 0 16px;color:#52525b;">A quick reminder of what we do — and don't do: we show you honest, historically calibrated odds. No buy/sell signals, no promises. You can verify our accuracy yourself on any asset page.</p>
-            <a href="{_frontendUrl}/dashboard" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Open the dashboard</a>
-            """;
-        await SendAsync(toEmail, "Welcome to RegimeDeck", body, ct);
-    }
-
+    // Confirmation + welcome in one email (a separate welcome send was dropped to
+    // keep per-signup volume low on the free email tier).
     public async Task SendEmailConfirmationAsync(string toEmail, string confirmUrl, CancellationToken ct = default)
     {
         var body = $"""
-            <h2 style="margin:0 0 12px;font-size:22px;color:#18181b;">Confirm your email</h2>
-            <p style="margin:0 0 16px;color:#52525b;">Click the button below to confirm your RegimeDeck account.</p>
+            <h2 style="margin:0 0 12px;font-size:22px;color:#18181b;">Confirm your email — welcome to RegimeDeck 📈</h2>
+            <p style="margin:0 0 16px;color:#52525b;">You're almost in. Confirm your account to finish setting it up.</p>
             <a href="{confirmUrl}" style="display:inline-block;background:#059669;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Confirm email</a>
-            <p style="margin:16px 0 0;color:#6b7280;font-size:13px;">The link expires in 24 hours. If you didn't create an account, you can ignore this email — unconfirmed accounts are deleted automatically.</p>
+            <p style="margin:16px 0 16px;color:#52525b;">Once you're in you can analyze any symbol, use custom prediction windows, and run backtests. What we do — and don't do: honest, historically calibrated odds. No buy/sell signals, no promises. You can verify our accuracy yourself on any asset page.</p>
+            <p style="margin:0;color:#6b7280;font-size:13px;">The link expires in 24 hours. If you didn't create an account, you can ignore this email — unconfirmed accounts are deleted automatically.</p>
             """;
         await SendAsync(toEmail, "Confirm your email – RegimeDeck", body, ct);
     }

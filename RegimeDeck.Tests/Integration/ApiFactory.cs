@@ -89,7 +89,6 @@ public class ApiFactory : WebApplicationFactory<Program>
 
     private sealed class NoopEmailService : IEmailService
     {
-        public Task SendWelcomeAsync(string toEmail, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendEmailConfirmationAsync(string toEmail, string confirmUrl, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken ct = default) => Task.CompletedTask;
         public Task SendWeeklyReportAsync(string toEmail, string subject, string bodyHtml, CancellationToken ct = default) => Task.CompletedTask;

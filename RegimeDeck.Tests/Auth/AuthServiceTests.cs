@@ -459,7 +459,7 @@ public class AuthServiceTests
     // ── Google ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GoogleLogin_NewUser_CreatesConfirmedAccountSendsWelcomeAndOpensSession()
+    public async Task GoogleLogin_NewUser_CreatesConfirmedAccountOpensSessionAndSendsNoEmail()
     {
         _google.Setup(g => g.ValidateAsync("id-token", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GoogleUserInfo("googler@example.com", "G"));
@@ -483,7 +483,8 @@ public class AuthServiceTests
         Assert.Equal(UserPlan.Free, saved.Plan);
 
         _refreshTokens.Verify(r => r.AddAsync(It.IsAny<RefreshToken>(), It.IsAny<CancellationToken>()), Times.Once());
-        _email.Verify(e => e.SendWelcomeAsync("googler@example.com", It.IsAny<CancellationToken>()), Times.Once());
+        // Google accounts are pre-confirmed and the standalone welcome was dropped,
+        // so a Google signup sends ZERO email.
         _email.Verify(e => e.SendEmailConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 }
