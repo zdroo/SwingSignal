@@ -54,7 +54,7 @@ if (builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled"))
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         // The proxy is the platform's own load balancer — addresses unknowable ahead of time
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
     });
 }

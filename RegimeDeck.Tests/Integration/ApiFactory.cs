@@ -52,8 +52,18 @@ public class ApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Swap SQL Server for a shared in-memory SQLite database
-            services.RemoveAll<DbContextOptions<RegimeDeckDbContext>>();
+            // Swap SQL Server for a shared in-memory SQLite database.
+            // EF Core 9+ registers extra option-configuration services beside
+            // DbContextOptions<T>, so removing only the options leaves the SqlServer
+            // provider live and adding Sqlite trips "only a single database provider
+            // can be registered". Strip every DbContext-related registration first.
+            foreach (var d in services.Where(s =>
+                         s.ServiceType == typeof(DbContextOptions<RegimeDeckDbContext>)
+                         || s.ServiceType == typeof(DbContextOptions)
+                         || s.ServiceType == typeof(RegimeDeckDbContext)
+                         || (s.ServiceType.FullName?.Contains("DbContextOptionsConfiguration") ?? false))
+                     .ToList())
+                services.Remove(d);
             _connection.Open();
             services.AddDbContext<RegimeDeckDbContext>(o => o.UseSqlite(_connection));
 
