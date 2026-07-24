@@ -22,6 +22,13 @@ early — `Frontend:Url` and Google's authorized origin must match it **exactly*
 - [ ] **Named data controller** for /privacy + /terms (GDPR).
 - [ ] Confirm `Features:ProEnabled` unset/false.
 
+> **Status (2026-07-24):** Domain purchased; Resend domain verified + API key + From decided;
+> Azure resource group `regimedeck-rg` + **Azure SQL** `RegimeDeck` (serverless GP, free offer set
+> to *keep-running/bill-overage*) created, connection string in hand; subscription upgraded to
+> Pay-As-You-Go. **Blocked:** App Service B1 create fails on a 0 "Total VMs" quota — App Service
+> quota-increase request filed (East US, new limit 3). Resume: once quota clears, create the B1
+> Web App (Linux, .NET 10), flip Always On, then deployment + env vars. Backend is now on **.NET 10**.
+
 ## Phase 1 — Provision
 - [ ] **Database** — Azure SQL (easiest) or SQL Server on a VPS. Get connection string.
 - [ ] **API host with HTTPS** — Azure App Service (Linux, .NET 8) simplest; VPS needs
