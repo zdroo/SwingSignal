@@ -4,19 +4,11 @@ namespace RegimeDeck.Application.Backtesting;
 
 public interface IBacktestService
 {
-    // profile: null = auto by market type (production behavior), "crypto" or
-    // "default" force a matching profile. floorHistory: null = follows the
-    // profile; true/false force analog candidates to start at the asset's
-    // first candle or not. Both exist so configurations can be A/B validated.
-    Task<BacktestResultDto> RunAsync(
-        string symbol, int days, int topK = 10,
-        int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
-        string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
-        double? shrinkPrior = null, int? baseRateYears = null,
-        CancellationToken ct = default);
+    /// Walk-forward backtest. See BacktestQuery for the standard vs research inputs.
+    Task<BacktestResultDto> RunAsync(string symbol, BacktestQuery query, CancellationToken ct = default);
 
+    /// Runs the backtest under both the naive baseline and the current algorithm
+    /// so improvements can be measured rather than assumed.
     Task<BacktestComparisonDto> CompareAsync(
-        string symbol, int days, int topK = 10,
-        int? fromYear = null, int? toYear = null,
-        CancellationToken ct = default);
+        string symbol, int days, int topK = 10, CancellationToken ct = default);
 }

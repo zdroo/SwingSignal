@@ -34,48 +34,41 @@ public class BacktestService : IBacktestService
         _snapshots = snapshots;
     }
 
-    public async Task<BacktestResultDto> RunAsync(
-        string symbol, int days, int topK = 10,
-        int? fromYear = null, int? toYear = null, double? stateBandwidth = null,
-        string? profile = null, bool? floorHistory = null, double? cycleBandwidth = null,
-        double? shrinkPrior = null, int? baseRateYears = null,
-        CancellationToken ct = default)
+    public async Task<BacktestResultDto> RunAsync(string symbol, BacktestQuery query, CancellationToken ct = default)
     {
-        var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
+        var (asset, snapshots, candles) = await LoadDataAsync(symbol, query.Days, ct);
 
-        var baseOptions = profile switch
+        var baseOptions = query.Profile switch
         {
             "crypto"        => MatchingOptions.CryptoProduction,
             "crypto-native" => MatchingOptions.CryptoShortHorizon,
             "default"       => MatchingOptions.Production,
-            _               => MatchingOptions.ForMarket(asset.MarketType, days),
+            _               => MatchingOptions.ForMarket(asset.MarketType, query.Days),
         };
 
         // An explicit 0 disables conditioning; null keeps the production setting
         var options = baseOptions with
         {
-            StateBandwidth = stateBandwidth is null
+            StateBandwidth = query.StateH is null
                 ? baseOptions.StateBandwidth
-                : stateBandwidth == 0 ? null : stateBandwidth,
-            CryptoCycleBandwidth = cycleBandwidth is null
+                : query.StateH == 0 ? null : query.StateH,
+            CryptoCycleBandwidth = query.CycleH is null
                 ? baseOptions.CryptoCycleBandwidth
-                : cycleBandwidth == 0 ? null : cycleBandwidth,
-            ShrinkagePrior = shrinkPrior is null
+                : query.CycleH == 0 ? null : query.CycleH,
+            ShrinkagePrior = query.ShrinkM is null
                 ? baseOptions.ShrinkagePrior
-                : shrinkPrior == 0 ? null : shrinkPrior,
-            BaseRateTrailingYears = baseRateYears is null
+                : query.ShrinkM == 0 ? null : query.ShrinkM,
+            BaseRateTrailingYears = query.BaseRateYears is null
                 ? baseOptions.BaseRateTrailingYears
-                : baseRateYears == 0 ? null : baseRateYears
+                : query.BaseRateYears == 0 ? null : query.BaseRateYears
         };
 
-        return RunCore(asset, snapshots, candles, days, topK, options, fromYear, toYear,
-            AnalogFloor(floorHistory ?? baseOptions.FloorAnalogsToAssetHistory, candles));
+        return RunCore(asset, snapshots, candles, query.Days, query.TopK, options, query.FromYear, query.ToYear,
+            AnalogFloor(query.FloorHistory ?? baseOptions.FloorAnalogsToAssetHistory, candles));
     }
 
     public async Task<BacktestComparisonDto> CompareAsync(
-        string symbol, int days, int topK = 10,
-        int? fromYear = null, int? toYear = null,
-        CancellationToken ct = default)
+        string symbol, int days, int topK = 10, CancellationToken ct = default)
     {
         var (asset, snapshots, candles) = await LoadDataAsync(symbol, days, ct);
 
@@ -83,9 +76,9 @@ public class BacktestService : IBacktestService
         // horizon-appropriate crypto profile, everything else the full set.
         var currentOptions = MatchingOptions.ForMarket(asset.MarketType, days);
 
-        var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline, fromYear, toYear);
-        var current = RunCore(asset, snapshots, candles, days, topK, currentOptions, fromYear, toYear,
-            AnalogFloor(currentOptions.FloorAnalogsToAssetHistory, candles));
+        var baseline = RunCore(asset, snapshots, candles, days, topK, MatchingOptions.Baseline);
+        var current = RunCore(asset, snapshots, candles, days, topK, currentOptions,
+            minAnalogDate: AnalogFloor(currentOptions.FloorAnalogsToAssetHistory, candles));
 
         return new BacktestComparisonDto(baseline, current, Summarize(baseline, current));
     }
