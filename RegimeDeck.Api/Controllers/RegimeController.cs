@@ -77,10 +77,7 @@ public class RegimeController : ControllerBase
 
         await _searchLog.LogAsync(normalized, q, src, userId, wasGated: false, ct);
 
-        var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
-        if (asset is null)
-            return StatusCode(503, $"Could not fetch data for symbol '{normalized}'. The symbol may not be supported.");
-
+        _ = await _ingestion.EnsureSupportedAsync(normalized, ct);
         return Ok(await _odds.GetOddsAsync(normalized, ct));
     }
 
@@ -110,12 +107,7 @@ public class RegimeController : ControllerBase
                 "Pro removes this cap — or come back tomorrow.");
         }
 
-        var normalized = SymbolNormalizer.Normalize(symbol);
-
-        var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
-        if (asset is null)
-            return StatusCode(503, $"Could not fetch data for symbol '{normalized}'. The symbol may not be supported.");
-
-        return Ok(await _odds.GetOddsForDaysAsync(normalized, days, ct));
+        var asset = await _ingestion.EnsureSupportedAsync(symbol, ct);
+        return Ok(await _odds.GetOddsForDaysAsync(asset.Symbol, days, ct));
     }
 }

@@ -35,6 +35,7 @@ public class ExceptionHandlingMiddleware
                 NotFoundException => (StatusCodes.Status404NotFound, ex.Message),
                 ConflictException => (StatusCodes.Status409Conflict, ex.Message),
                 RateLimitedException => (StatusCodes.Status429TooManyRequests, ex.Message),
+                ServiceUnavailableException => (StatusCodes.Status503ServiceUnavailable, ex.Message),
 
                 ArgumentException or ArgumentOutOfRangeException => (StatusCodes.Status400BadRequest, ex.Message),
                 InvalidOperationException => (StatusCodes.Status400BadRequest, ex.Message),

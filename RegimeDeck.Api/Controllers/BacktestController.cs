@@ -36,13 +36,8 @@ public class BacktestController : ControllerBase
         if (query.HasResearchParams)
             _pro.RequirePro(User.IsPro(), "Custom backtest parameters are a Pro feature.");
 
-        var normalized = SymbolNormalizer.Normalize(symbol);
-
-        var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
-        if (asset is null)
-            return StatusCode(503, $"Could not fetch data for symbol '{normalized}'.");
-
-        return Ok(await _backtest.RunAsync(normalized, query, ct));
+        var asset = await _ingestion.EnsureSupportedAsync(symbol, ct);
+        return Ok(await _backtest.RunAsync(asset.Symbol, query, ct));
     }
 
     // Runs the backtest twice — naive baseline vs current algorithm — to
@@ -60,12 +55,7 @@ public class BacktestController : ControllerBase
         if (topK is < 1 or > 20)
             return BadRequest("topK must be between 1 and 20");
 
-        var normalized = SymbolNormalizer.Normalize(symbol);
-
-        var asset = await _ingestion.EnsureIngestedAsync(normalized, ct);
-        if (asset is null)
-            return StatusCode(503, $"Could not fetch data for symbol '{normalized}'.");
-
-        return Ok(await _backtest.CompareAsync(normalized, days, topK, ct));
+        var asset = await _ingestion.EnsureSupportedAsync(symbol, ct);
+        return Ok(await _backtest.CompareAsync(asset.Symbol, days, topK, ct));
     }
 }

@@ -43,3 +43,10 @@ public sealed class RateLimitedException : AppException
 {
     public RateLimitedException(string message) : base(message) { }
 }
+
+/// 503 — a dependency (e.g. on-demand market-data ingestion) couldn't fulfil the
+/// request right now; the symbol may be unsupported or the provider unavailable.
+public sealed class ServiceUnavailableException : AppException
+{
+    public ServiceUnavailableException(string message) : base(message) { }
+}
