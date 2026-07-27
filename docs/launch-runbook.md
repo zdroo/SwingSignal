@@ -4,21 +4,24 @@ Ordered, tickable steps for the **free** public launch (Pro stays dark:
 `Features:ProEnabled` unset/false). Work top to bottom. Two items are load-bearing
 and flagged 🔴 — don't skip their verification.
 
-**Topology:** FE (Next.js) on Vercel at `regimedeck.com`, API (ASP.NET Core 8) +
-SQL Server at `api.regimedeck.com`. Same registrable domain = clean cookies.
-Decide the **canonical FE origin** (apex `regimedeck.com` vs `www.regimedeck.com`)
-early — `Frontend:Url` and Google's authorized origin must match it **exactly**.
+**Topology:** FE (Next.js) on Vercel at the apex `regimedeck.com`, API (ASP.NET Core,
+.NET 10) + Azure SQL at `api.regimedeck.com`. Same registrable domain = clean cookies.
+The **canonical FE origin is the apex** — `Frontend:Url`, `NEXT_PUBLIC_SITE_URL` and
+Google's authorized origin must all be exactly `https://regimedeck.com`, no trailing slash.
 
 ---
 
 ## Phase 0 — Prep (no hosting yet)
 - [x] **Domain purchased** — `regimedeck.com` (www). *(2026-07-23)*
-- [ ] **Decide canonical FE origin** — apex vs www. Everything below keys off it.
+- [x] **Canonical FE origin** — **apex: `https://regimedeck.com`** (www redirects to it).
+      `Frontend:Url`, `NEXT_PUBLIC_SITE_URL` and Google's authorized JS origin all use
+      exactly this, no trailing slash. *(2026-07-27)*
 - [ ] **Fresh `Jwt:Secret`** — long random, store in the host secret manager (NOT git).
 - [ ] **Dedicated Google OAuth app** — Cloud Console → Credentials → OAuth client ID
       (Web application). Authorized JS origin = the canonical FE origin. Copy the client ID.
 - [ ] **Resend** — verify the sending domain (DNS records), grab the API key.
-- [ ] **Legal mailboxes** — real `privacy@` + `legal@` (forwards OK).
+- [ ] **Legal mailboxes** — real `privacy@regimedeck.com` + `legal@regimedeck.com`
+      (forwards OK). These exact addresses are printed on /privacy and /terms.
 - [ ] **Named data controller** for /privacy + /terms (GDPR).
 - [ ] Confirm `Features:ProEnabled` unset/false.
 
@@ -28,10 +31,15 @@ early — `Frontend:Url` and Google's authorized origin must match it **exactly*
 > Pay-As-You-Go. **Blocked:** App Service B1 create fails on a 0 "Total VMs" quota — App Service
 > quota-increase request filed (East US, new limit 3). Resume: once quota clears, create the B1
 > Web App (Linux, .NET 10), flip Always On, then deployment + env vars. Backend is now on **.NET 10**.
+>
+> **Status (2026-07-27):** Canonical origin decided = **apex**. Both repos pushed clean.
+> Legal-page mailboxes corrected from the never-owned `regimedeck.app` to `regimedeck.com`.
+> Still blocked on the same App Service quota request — nothing else in Phase 1+ can start
+> until it clears (or we take the VPS fallback).
 
 ## Phase 1 — Provision
 - [ ] **Database** — Azure SQL (easiest) or SQL Server on a VPS. Get connection string.
-- [ ] **API host with HTTPS** — Azure App Service (Linux, .NET 8) simplest; VPS needs
+- [ ] **API host with HTTPS** — Azure App Service (Linux, .NET 10) simplest; VPS needs
       Caddy/nginx + certbot. HTTPS is mandatory (the refresh cookie is `Secure`).
 - [ ] **FE** — Vercel project linked to `swing-signal-web`.
 
@@ -41,14 +49,14 @@ early — `Frontend:Url` and Google's authorized origin must match it **exactly*
 - [ ] `Google:ClientId` (dedicated)
 - [ ] `Resend:ApiKey`, `Resend:From="RegimeDeck <you@regimedeck.com>"`, **remove** `Resend:DevRedirectTo`
 - [ ] `Fred:ApiKey`
-- [ ] `Frontend:Url=https://<canonical-fe-origin>` — exact, no trailing slash (drives CORS + CSRF Origin check)
+- [ ] `Frontend:Url=https://regimedeck.com` — exact, no trailing slash (drives CORS + CSRF Origin check)
 - [ ] `ForwardedHeaders:Enabled=true`
 - [ ] `ASPNETCORE_ENVIRONMENT=Production`, `Features:ProEnabled=false`
 - [ ] First boot auto-migrates + seeds; wait ~30 min for boards to populate. Allow outbound (FRED/Yahoo/Binance).
 
 ## Phase 3 — Configure the FE (Vercel env)
 - [ ] `NEXT_PUBLIC_API_URL=https://api.regimedeck.com`
-- [ ] `NEXT_PUBLIC_SITE_URL=https://<canonical-fe-origin>`
+- [ ] `NEXT_PUBLIC_SITE_URL=https://regimedeck.com`
 - [ ] `NEXT_PUBLIC_GOOGLE_CLIENT_ID=<dedicated>`
 - [ ] `NEXT_PUBLIC_PRO_ENABLED=false`
 - [ ] `NEXT_PUBLIC_UMAMI_SRC` + `NEXT_PUBLIC_UMAMI_WEBSITE_ID` (optional, can follow)
