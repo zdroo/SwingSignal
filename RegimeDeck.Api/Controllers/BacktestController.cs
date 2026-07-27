@@ -40,8 +40,7 @@ public class BacktestController : ControllerBase
         return Ok(await _backtest.RunAsync(asset.Symbol, query, ct));
     }
 
-    // Runs the backtest twice — naive baseline vs current algorithm — to
-    // measure whether the matching improvements actually help.
+    // Runs the backtest twice (naive baseline vs current) to measure the improvement
     [HttpGet("{symbol}/compare")]
     public async Task<IActionResult> Compare(
         string symbol,

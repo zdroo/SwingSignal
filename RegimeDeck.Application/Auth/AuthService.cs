@@ -13,9 +13,8 @@ namespace RegimeDeck.Application.Auth;
 
 public class AuthService : IAuthService
 {
-    // The session length lives here (the access token is short — 1h — and rotated
-    // silently). Rotation issues a fresh 365-day token each time, so an active
-    // user effectively never has to sign in again.
+    // The session length (the 1h access token is rotated silently); rotation
+    // renews it, so an active user effectively never signs in again.
     private static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(365);
     private static readonly TimeSpan ConfirmationTokenLifetime = TimeSpan.FromHours(24);
     private static readonly TimeSpan ResetTokenLifetime = TimeSpan.FromHours(1);
@@ -80,7 +79,7 @@ public class AuthService : IAuthService
         var confirmToken = IssueConfirmationToken(user);
         await _users.AddAsync(user, ct);
 
-        // Fire-and-forget semantics: a mail outage must not block registration
+        // The email service logs and swallows outages, so this can't block registration
         await _email.SendEmailConfirmationAsync(user.Email, ConfirmUrl(confirmToken), ct);
 
         return await OpenSessionAsync(user, userAgent, ct);
@@ -108,9 +107,7 @@ public class AuthService : IAuthService
 
         var now = DateTime.UtcNow;
 
-        // Reuse detection: a token that was already rotated away is being replayed.
-        // With client-side single-flight this shouldn't happen on the honest path —
-        // it signals theft. Revoke the whole family and force a fresh sign-in.
+        // Replaying an already-rotated token signals theft — revoke the whole family.
         if (existing.RevokedAt is not null)
         {
             await _refreshTokens.RevokeFamilyAsync(existing.FamilyId, now, ct);
@@ -124,7 +121,7 @@ public class AuthService : IAuthService
         if (user is null)
             throw new AuthenticationFailedException("Session is invalid. Please sign in again.");
 
-        // Rotate within the same family (same session/device continues)
+        // Rotate within the same family
         var (replacement, raw) = NewRefreshToken(user.Id, existing.FamilyId, userAgent);
         await _refreshTokens.RotateAsync(existing, replacement, ct);
 
@@ -138,7 +135,7 @@ public class AuthService : IAuthService
         var existing = await _refreshTokens.GetByHashAsync(HashToken(refreshToken), ct);
         if (existing is null) return;
 
-        // Kill the whole rotation chain, so a stolen mid-chain token can't continue
+        // Kill the whole chain, so a stolen mid-chain token can't continue
         await _refreshTokens.RevokeFamilyAsync(existing.FamilyId, DateTime.UtcNow, ct);
     }
 
@@ -154,9 +151,9 @@ public class AuthService : IAuthService
 
         if (user is null)
         {
-            // First Google sign-in: create the account. Google has verified the
-            // email, so it's confirmed from the start. The random password hash
-            // means password login stays impossible until the user sets one.
+            // First Google sign-in: Google verified the email so it's confirmed;
+            // the random hash blocks password login until the user sets one via reset.
+            // No email is sent (Google users are pre-confirmed).
             user = new User
             {
                 Email = email,
@@ -164,14 +161,11 @@ public class AuthService : IAuthService
                 CreatedAt = DateTime.UtcNow,
                 IsEmailConfirmed = true
             };
-
-            // No email here: Google accounts are already confirmed, and the
-            // welcome content now lives in the confirmation email (email signups only).
             await _users.AddAsync(user, ct);
         }
         else if (!user.IsEmailConfirmed)
         {
-            user.IsEmailConfirmed = true; // Google ownership proof supersedes pending confirmation
+            user.IsEmailConfirmed = true; // Google ownership supersedes pending confirmation
             await _users.UpdateAsync(user, ct);
         }
 
@@ -192,8 +186,6 @@ public class AuthService : IAuthService
         user.EmailConfirmationToken = null;
         user.EmailConfirmationTokenExpiry = null;
         await _users.UpdateAsync(user, ct);
-        // No welcome email — it's folded into the confirmation email the user
-        // just acted on.
     }
 
     public async Task ResendConfirmationAsync(ResendConfirmationRequest request, CancellationToken ct = default)
@@ -204,8 +196,7 @@ public class AuthService : IAuthService
         // Never reveal whether the email exists
         if (user is null || user.IsEmailConfirmed) return;
 
-        // Silently skip when throttled — see IsEmailThrottled for why we must not
-        // surface a distinguishable error on this enumeration-safe endpoint.
+        // Silently skip when throttled (see IsEmailThrottled — a 429 would leak existence)
         if (IsEmailThrottled(user.LastConfirmationEmailAt, user.ConfirmationEmailCount)) return;
 
         var token = IssueConfirmationToken(user);
@@ -221,8 +212,7 @@ public class AuthService : IAuthService
         // Never reveal whether the email exists
         if (user is null) return;
 
-        // Silently skip when throttled — a distinguishable error here would leak
-        // that the address is registered (see IsEmailThrottled).
+        // Silently skip when throttled (see IsEmailThrottled — a 429 would leak existence)
         if (IsEmailThrottled(user.LastPasswordResetEmailAt, user.PasswordResetEmailCount)) return;
 
         var now = DateTime.UtcNow;
@@ -255,12 +245,10 @@ public class AuthService : IAuthService
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         user.PasswordResetToken = null;
         user.PasswordResetTokenExpiry = null;
-        // A password reset proves email ownership just as well as the confirm link
-        user.IsEmailConfirmed = true;
+        user.IsEmailConfirmed = true; // a reset proves email ownership like the confirm link
         await _users.UpdateAsync(user, ct);
 
-        // Someone resetting a password may be locking out an intruder — drop every
-        // existing session. The user signs in fresh afterward.
+        // A reset may be locking out an intruder — drop every session; the user signs in fresh
         await _refreshTokens.RevokeAllForUserAsync(user.Id, DateTime.UtcNow, ct);
     }
 
@@ -302,16 +290,15 @@ public class AuthService : IAuthService
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new NotFoundException("Account not found.");
 
-        // Google-created accounts have a random hash the user never knew — they
-        // set their first password through the reset flow, not here.
+        // Google accounts have a random hash the user never knew — they set their
+        // first password via the reset flow, not here.
         if (!_passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
             throw new ValidationException("Current password is incorrect.");
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword);
         await _users.UpdateAsync(user, ct);
 
-        // Sign every session out, then open a fresh one for THIS client so the
-        // caller stays signed in while all other devices are dropped.
+        // Sign out every session, then re-open this one so the caller stays signed in
         await _refreshTokens.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
         return await OpenSessionAsync(user, userAgent, ct);
     }
@@ -321,20 +308,18 @@ public class AuthService : IAuthService
         var user = await _users.GetByIdAsync(userId, ct)
             ?? throw new NotFoundException("Account not found.");
 
-        // Stop billing before the account disappears — otherwise a deleted Pro
-        // user keeps getting charged with no account left to manage it. Best-effort
-        // (logs, never throws) so a Stripe outage can't block the user's deletion.
+        // Cancel billing first so a deleted user isn't charged. Best-effort (the
+        // service logs + swallows) so a Stripe outage can't block deletion.
         await _billing.CancelSubscriptionAsync(userId, ct);
 
-        // GDPR: unlink search history first, then remove the account. The user's
-        // refresh tokens are cascade-deleted with the account row.
+        // GDPR: unlink search history, then delete (refresh tokens cascade with the row)
         await _analytics.DetachUserAsync(userId, ct);
         await _users.DeleteAsync(user, ct);
     }
 
     // ── Session helpers ──────────────────────────────────────────────────
 
-    // A fresh login/registration opens a new family (a new session/device).
+    // A fresh login/registration opens a new family (session)
     private async Task<AuthResult> OpenSessionAsync(User user, string? userAgent, CancellationToken ct)
     {
         var (token, raw) = NewRefreshToken(user.Id, Guid.NewGuid(), userAgent);
@@ -344,7 +329,7 @@ public class AuthService : IAuthService
 
     private static (RefreshToken Entity, string Raw) NewRefreshToken(Guid userId, Guid familyId, string? userAgent)
     {
-        // Hex is cookie-safe (no +/=). 64 random bytes → 128 hex chars.
+        // Hex is cookie-safe (no +/=)
         var raw = Convert.ToHexString(RandomNumberGenerator.GetBytes(64));
         var now = DateTime.UtcNow;
 
@@ -374,9 +359,8 @@ public class AuthService : IAuthService
         return new AuthResult(response, rawRefreshToken);
     }
 
-    // Only the hash of a refresh token is ever stored, so a DB leak yields nothing
-    // usable. SHA-256 (not a slow KDF) is right here: the token is 64 bytes of
-    // CSPRNG output, not a low-entropy password, so there's nothing to brute-force.
+    // Store only the hash, so a DB leak is useless. SHA-256 (not a slow KDF) is
+    // right: the token is 64 bytes of CSPRNG output, nothing to brute-force.
     private static string HashToken(string raw) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
 
@@ -386,7 +370,6 @@ public class AuthService : IAuthService
     {
         var now = DateTime.UtcNow;
 
-        // Reset the rolling-window counter when the window has passed
         if (user.LastConfirmationEmailAt is null || now - user.LastConfirmationEmailAt > EmailWindow)
             user.ConfirmationEmailCount = 0;
 
@@ -398,11 +381,9 @@ public class AuthService : IAuthService
         return user.EmailConfirmationToken;
     }
 
-    // 60s between emails, max 5 per rolling hour — per account, on top of IP rate
-    // limits. Returns true when the send should be silently skipped. This must NOT
-    // throw: resend-confirmation and forgot-password are enumeration-safe endpoints
-    // that always answer 200, so a distinguishable 429 for a registered address
-    // (vs 200 for an unknown one) would itself reveal which emails have accounts.
+    // 60s between emails, max 5 per rolling hour, per account. Returns true to
+    // silently skip — must NOT throw: a 429 on the enumeration-safe endpoints
+    // (resend/forgot) would reveal which emails are registered.
     private static bool IsEmailThrottled(DateTime? lastAt, int count)
     {
         if (lastAt is null) return false;

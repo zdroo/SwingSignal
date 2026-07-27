@@ -101,8 +101,7 @@ public class AuthController : ControllerBase
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    // Writes the rotated refresh token into the HttpOnly cookie and returns only
-    // the access token / profile in the body.
+    // Refresh token → HttpOnly cookie; only the access token/profile goes in the body
     private OkObjectResult Issue(AuthResult result)
     {
         RefreshTokenCookie.Set(Response, result.RefreshToken);

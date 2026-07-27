@@ -58,13 +58,10 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.CryptoFearGreed,
     ];
 
-    // Crypto-native cycle gauges (family 7) — ingested series only crypto
-    // matching sees. All BTC-market-wide: crypto trades as one liquidity block.
-    // MVRV is deliberately absent: its only free source (bitcoin-data.com)
-    // serves a rolling ~4-year window, and a dimension present on today's
-    // vector but missing from most candidates differentiates nothing. The
-    // Mayer Multiple is its price-based stand-in with full history; MVRV is
-    // still ingested so it can be promoted when a deep source appears.
+    // Crypto-native cycle gauges (family 7), only crypto matching sees them.
+    // MVRV is absent: its only free source has a rolling ~4y window, so it's
+    // missing from most candidates and differentiates nothing — the Mayer
+    // Multiple is its full-history stand-in (MVRV still ingested for later).
     public static readonly MacroIndicatorType[] CryptoNativeIndicators =
     [
         MacroIndicatorType.CryptoMayerMultiple,
@@ -103,12 +100,9 @@ public class MacroSnapshotBuilder
         MacroIndicatorType.HighYieldSpreadMomentum6M,
     ];
 
-    // CryptoDimensions + the crypto-native gauges. Tested July 2026 and NOT
-    // shipped: net-zero Brier across all asset/horizon cells (30d clearly
-    // better, 180d clearly worse — cycle gauges make long-horizon analogs
-    // overconfident), direction accuracy +11pp net. Re-testable via the
-    // backtest profile "crypto-native"; revisit with family down-weighting
-    // or horizon-split profiles.
+    // CryptoDimensions + the crypto-native gauges. Tested July 2026, NOT shipped:
+    // net-zero Brier (30d better, 180d worse — gauges over-fit long horizons).
+    // Re-testable via the backtest profile "crypto-native".
     public static readonly MacroIndicatorType[] CryptoDimensionsWithNatives =
         [.. CryptoDimensions, .. CryptoNativeIndicators];
 
@@ -441,13 +435,10 @@ public class MacroSnapshotBuilder
     }
 
     // Finds the topK most similar snapshots to the one at [asOfIndex], using only
-    // information available at that time (stats from snapshots[0..asOfIndex]).
-    // Candidates must be at least 6 months older than the target month, and
-    // selected matches must be at least MatchSpacingMonths apart so that one
-    // macro event (e.g. late 2008) can't occupy several slots.
-    // minCandidateDate restricts analogs to months the asset was actually
-    // tradable — analogs before its listing can never be scored, so for
-    // short-history assets they only dilute the effective sample.
+    // data available then (stats from snapshots[0..asOfIndex]). Candidates are
+    // ≥6 months older, and selected matches ≥MatchSpacingMonths apart so one event
+    // (e.g. late 2008) can't fill several slots. minCandidateDate keeps analogs to
+    // months the asset actually traded (earlier ones can't be scored).
     public static List<MatchResult> FindMatches(
         IReadOnlyList<MonthlySnapshot> snapshots, int asOfIndex, int topK,
         MatchingOptions? options = null, DateTime? minCandidateDate = null)

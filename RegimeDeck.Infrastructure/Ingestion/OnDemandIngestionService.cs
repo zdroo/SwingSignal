@@ -45,10 +45,9 @@ public class OnDemandIngestionService : IAssetIngestionService
 
             if (hasCandles) return existing;
 
-            // Has the asset but no candles yet — ingest now. An already-registered
-            // asset gets the benefit of the doubt (it may be a seeded symbol whose
-            // scheduled ingestion just hasn't run, or a transient provider outage),
-            // so we return it either way rather than deleting it.
+            // No candles yet — ingest, but keep the row either way: an already-
+            // registered asset gets the benefit of the doubt (seeded symbol, or a
+            // transient outage) rather than being deleted.
             await IngestCandlesAsync(existing, ct);
             return existing;
         }
@@ -69,9 +68,8 @@ public class OnDemandIngestionService : IAssetIngestionService
         await _db.SaveChangesAsync(ct); // need the Id for the candle FK
         _logger.LogInformation("Registered new asset on-demand: {Symbol} ({MarketType})", symbol, marketType);
 
-        // A brand-new symbol with no fetchable price data is a typo/unsupported
-        // ticker — don't leave a junk asset row behind (which would also make
-        // the odds endpoint return an empty 200 instead of "not supported").
+        // No fetchable data = typo/unsupported ticker — remove the row rather than
+        // leave junk (which would also make odds return an empty 200, not a 503).
         if (!await IngestCandlesAsync(asset, ct))
         {
             _db.Assets.Remove(asset);

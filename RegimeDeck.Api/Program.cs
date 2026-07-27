@@ -45,9 +45,8 @@ if (builder.Environment.IsProduction())
             $"Missing required production configuration: {string.Join(", ", missing)}");
 }
 
-// Behind a reverse proxy the client IP and scheme arrive in X-Forwarded-*;
-// without this the rate limiter would throttle the proxy's IP (one bucket
-// for every user) and HTTPS redirection could loop. No-op until enabled.
+// Behind a proxy, read the client IP/scheme from X-Forwarded-* — else the rate
+// limiter throttles the proxy's single IP and HTTPS redirects can loop. No-op until enabled.
 if (builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled"))
 {
     builder.Services.Configure<ForwardedHeadersOptions>(options =>

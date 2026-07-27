@@ -13,10 +13,8 @@ namespace RegimeDeck.Api.Controllers;
 [Route("api/[controller]")]
 public class RegimeController : ControllerBase
 {
-    // Odds for these are free without an account — the landing page teaser tier
-    // ("BTC, SPY and Gold are free without an account"). GLD (the ETF) is the
-    // ticker actually surfaced to anonymous visitors (popular chips, sitemap);
-    // GC=F (futures) is kept too since it was already granted.
+    // Free without an account (the "BTC, SPY and Gold are free" teaser). GLD is the
+    // ticker shown to anonymous visitors; GC=F kept since it was already granted.
     private static readonly HashSet<string> FlagshipSymbols =
         new(StringComparer.OrdinalIgnoreCase) { "BTCUSDT", "SPY", "GLD", "GC=F" };
 
@@ -81,8 +79,7 @@ public class RegimeController : ControllerBase
         return Ok(await _odds.GetOddsAsync(normalized, ct));
     }
 
-    // Re-runs the full analog computation per request — deliberate research
-    // action, not casual browsing, so it shares the strict compute budget
+    // Re-runs the full analog computation per request — hence the strict compute budget
     [HttpGet("odds/{symbol}/period")]
     [EnableRateLimiting("compute")]
     public async Task<IActionResult> GetOddsForPeriod(
@@ -97,8 +94,7 @@ public class RegimeController : ControllerBase
         if (User.Identity?.IsAuthenticated != true)
             return Unauthorized("Create a free account to use custom prediction windows.");
 
-        // Once Pro is live, Free accounts get a generous daily allowance;
-        // Pro removes the cap. Inactive while the flag is off.
+        // When Pro is live: Free gets a daily allowance, Pro is uncapped. No-op while the flag is off.
         if (_pro.GateActive(User.IsPro())
             && !_quota.TryConsume(User.RequireUserId(), ProFeatures.CustomWindowDailyLimit))
         {
