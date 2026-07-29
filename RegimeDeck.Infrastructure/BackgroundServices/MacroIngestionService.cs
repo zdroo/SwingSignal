@@ -35,6 +35,13 @@ public class MacroIngestionService : BackgroundService
         MacroIndicatorType.HousingStarts,
         MacroIndicatorType.HighYieldSpread,
         MacroIndicatorType.SahmRule,
+
+        // Global-liquidity inputs (dashboard only, not part of the regime matcher)
+        MacroIndicatorType.TreasuryGeneralAccount,
+        MacroIndicatorType.EcbBalanceSheet,
+        MacroIndicatorType.BojBalanceSheet,
+        MacroIndicatorType.EurUsd,
+        MacroIndicatorType.JpyUsd,
     ];
 
     // Deep history gives the regime matcher more periods to compare against

@@ -54,4 +54,13 @@ public enum MacroIndicatorType
     StablecoinSupply,    // USDT+USDC market cap, compared as YoY growth (CoinMetrics)
     CryptoEthBtcRatio,   // ETH/BTC from our own candles, compared as YoY change
     CryptoMayerMultiple, // BTC close / its 200-day average, from our own candles — the price-based MVRV stand-in
+
+    // Global-liquidity inputs — ingested for the liquidity dashboard only, never
+    // fed into the regime matcher or signal classifier. APPEND-ONLY: the enum
+    // persists as its int, so new values must stay at the end.
+    TreasuryGeneralAccount, // WTREGEN — Treasury's cash at the Fed (Mil $), drains net liquidity
+    EcbBalanceSheet,        // ECBASSETSW — ECB total assets (Mil €)
+    BojBalanceSheet,        // JPNASSETS — Bank of Japan total assets (100 Mil ¥)
+    EurUsd,                 // DEXUSEU — US $ per 1 €
+    JpyUsd,                 // DEXJPUS — ¥ per 1 US $
 }

@@ -221,16 +221,6 @@ public class ApiIntegrationTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CustomWindow_Anonymous_401_BadDays_400()
-    {
-        var gated = await _client.GetAsync("/api/regime/odds/BTCUSDT/period?days=30");
-        Assert.Equal(HttpStatusCode.Unauthorized, gated.StatusCode);
-
-        var badDays = await _client.GetAsync("/api/regime/odds/BTCUSDT/period?days=5");
-        Assert.Equal(HttpStatusCode.BadRequest, badDays.StatusCode);
-    }
-
-    [Fact]
     public async Task Backtest_Anonymous_401()
     {
         var response = await _client.GetAsync("/api/backtest/BTCUSDT?days=90");

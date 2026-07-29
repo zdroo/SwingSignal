@@ -51,11 +51,8 @@ public record OddsForPeriodDto(
     double PositiveOdds,       // shrunk toward the base rate — what we actually claim
     decimal AverageReturn,
     decimal MedianReturn,
-    decimal BestCase,
-    decimal WorstCase,
-    decimal? PriceTargetLow,   // P25 absolute price
-    decimal? PriceTargetMid,   // P50 absolute price
-    decimal? PriceTargetHigh,  // P75 absolute price
+    decimal BestCase,          // best analog outcome — the outcome range, not a target
+    decimal WorstCase,         // worst analog outcome — the realistic downside
     double? BaseRate = null,   // % of ALL historical windows of this length that were positive
     double Edge = 0);          // PositiveOdds - BaseRate: what the current regime adds
 
@@ -98,12 +95,26 @@ public record AssetOddsDto(
     AnalogBreakdownDto? Breakdown = null,
     TradeReadDto? TradeRead = null);
 
-// Odds for a single user-selected horizon (7-365 days)
-public record AssetPeriodOddsDto(
-    string Symbol,
+/// One canonical macro regime and the asset-class playbook its conditions have
+/// historically favored — produced by the SAME rule-based engine as the live
+/// regime (RegimeInsight.ComputePlaybook), just applied to the archetype's
+/// stylized readings. Descriptive, not advice.
+public record RegimePlaybookDto(
+    string Id,             // stable slug, e.g. "risk-on-expansion"
     string Name,
-    int Days,
-    int MatchesUsed,
-    decimal? CurrentPrice,
-    OddsForPeriodDto Odds,
-    string Disclaimer);
+    string Summary,        // one-line description of the regime
+    List<string> Hallmarks,// the defining conditions, in plain words
+    int HealthScore,       // 0-100 market health of this archetype
+    string HealthLabel,    // Supportive … Stressed
+    PlaybookDto Playbook,  // reuses the existing engine output
+    bool IsCurrent,        // today's readings are nearest to this archetype
+    int MatchScore);       // 0-100 closeness of today's readings to this archetype
+
+/// The full regime-playbook board: every canonical regime in a fixed order,
+/// plus which one today's macro readings sit closest to. CurrentRegimeId is
+/// null when the live regime can't be classified yet (ingestion still warming).
+public record RegimePlaybookBoardDto(
+    List<RegimePlaybookDto> Regimes,
+    string? CurrentRegimeId,
+    string? RunnerUpRegimeId,   // second-nearest — regimes blend, so we name it
+    string Note);

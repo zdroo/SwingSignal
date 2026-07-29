@@ -52,9 +52,9 @@ public class HistoricalOddsService : IHistoricalOddsService
         var currentPrice = candles[^1].Close;
         var explanations = await _explainer.GenerateAsync(asset.Symbol, asset.MarketType, matches, candles, ct);
 
-        var oneMonth    = ComputeOdds(ComputeReturns(candles, shortWeighted, 30), currentPrice, BaseRateFor(candles, 30, shortOptions), shortOptions);
-        var threeMonths = ComputeOdds(ComputeReturns(candles, weighted, 90), currentPrice, BaseRateFor(candles, 90, longOptions), longOptions);
-        var sixMonths   = ComputeOdds(ComputeReturns(candles, weighted, 180), currentPrice, BaseRateFor(candles, 180, longOptions), longOptions);
+        var oneMonth    = ComputeOdds(ComputeReturns(candles, shortWeighted, 30), BaseRateFor(candles, 30, shortOptions), shortOptions);
+        var threeMonths = ComputeOdds(ComputeReturns(candles, weighted, 90), BaseRateFor(candles, 90, longOptions), longOptions);
+        var sixMonths   = ComputeOdds(ComputeReturns(candles, weighted, 180), BaseRateFor(candles, 180, longOptions), longOptions);
 
         return new AssetOddsDto(
             Symbol:      asset.Symbol,
@@ -132,41 +132,6 @@ public class HistoricalOddsService : IHistoricalOddsService
         if (returns.Count == 0) return null;
         var sorted = returns.OrderBy(r => r).ToList();
         return sorted[sorted.Count / 2];
-    }
-
-    public async Task<AssetPeriodOddsDto> GetOddsForDaysAsync(string symbol, int days, CancellationToken ct = default)
-    {
-        if (days is < 7 or > 365)
-            throw new ValidationException("days must be between 7 and 365");
-
-        var asset = await _assets.GetBySymbolAsync(symbol.ToUpperInvariant(), ct)
-            ?? throw new NotFoundException($"Asset {symbol.ToUpperInvariant()} not found");
-
-        var candles = await _candles.GetDailyHistoryAsync(asset.Id, ct);
-
-        var options = MatchingOptions.ForMarket(asset.MarketType, days);
-        var (matches, weighted) = await LoadAnalogsAsync(candles, options, ct);
-
-        if (matches.Count == 0 || candles.Count == 0)
-        {
-            return new AssetPeriodOddsDto(
-                asset.Symbol, asset.Name, days, 0, null,
-                EmptyPeriod(),
-                "Insufficient historical data to compute odds.");
-        }
-
-        var currentPrice = candles[^1].Close;
-        var returns = ComputeReturns(candles, weighted, days);
-
-        return new AssetPeriodOddsDto(
-            Symbol:      asset.Symbol,
-            Name:        asset.Name,
-            Days:        days,
-            MatchesUsed: matches.Count,
-            CurrentPrice: currentPrice,
-            Odds:        ComputeOdds(returns, currentPrice, BaseRateFor(candles, days, options), options),
-            Disclaimer:  Disclaimer
-        );
     }
 
     // The profile decides whether the base rate spans all history or only
@@ -285,8 +250,7 @@ public class HistoricalOddsService : IHistoricalOddsService
     // shrinkage scales with the Kish effective sample size, so assets with
     // thin history automatically publish humbler odds.
     private static OddsForPeriodDto ComputeOdds(
-        List<(decimal Return, double Weight)> returns, decimal currentPrice, double? baseRate,
-        MatchingOptions options)
+        List<(decimal Return, double Weight)> returns, double? baseRate, MatchingOptions options)
     {
         if (returns.Count == 0)
             return EmptyPeriod();
@@ -311,8 +275,6 @@ public class HistoricalOddsService : IHistoricalOddsService
 
         var weightedAvg = (decimal)(returns.Sum(r => (double)r.Return * r.Weight) / totalWeight);
         var median = WeightedPercentile(sorted, totalWeight, 0.50);
-        var p25    = WeightedPercentile(sorted, totalWeight, 0.25);
-        var p75    = WeightedPercentile(sorted, totalWeight, 0.75);
 
         return new OddsForPeriodDto(
             TotalCases:      returns.Count,
@@ -322,9 +284,6 @@ public class HistoricalOddsService : IHistoricalOddsService
             MedianReturn:    Math.Round(median, 2),
             BestCase:        Math.Round(sorted[^1].Return, 2),
             WorstCase:       Math.Round(sorted[0].Return, 2),
-            PriceTargetLow:  Math.Round(currentPrice * (1 + p25 / 100), 2),
-            PriceTargetMid:  Math.Round(currentPrice * (1 + median / 100), 2),
-            PriceTargetHigh: Math.Round(currentPrice * (1 + p75 / 100), 2),
             BaseRate:        baseRate is null ? null : Math.Round(baseRate.Value, 1),
             Edge:            baseRate is null ? 0 : Math.Round(shrunkOdds - baseRate.Value, 1)
         );
@@ -348,8 +307,7 @@ public class HistoricalOddsService : IHistoricalOddsService
         return sorted[^1].Return;
     }
 
-    private static OddsForPeriodDto EmptyPeriod() =>
-        new(0, 0, 0, 0, 0, 0, 0, null, null, null);
+    private static OddsForPeriodDto EmptyPeriod() => new(0, 0, 0, 0, 0, 0, 0);
 
     private static AssetOddsDto EmptyOdds(Asset asset) =>
         new(asset.Symbol, asset.Name, 0, null,

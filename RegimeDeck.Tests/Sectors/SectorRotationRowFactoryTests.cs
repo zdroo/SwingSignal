@@ -8,7 +8,7 @@ public class SectorRotationRowFactoryTests
     private static readonly DateTime At = new(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc);
 
     private static OddsForPeriodDto Period(int cases, double odds = 64, double baseRate = 55, double edge = 9) =>
-        new(cases, 20, odds, 3m, 3m, 25m, -12m, null, null, null, cases > 0 ? baseRate : null, cases > 0 ? edge : 0);
+        new(cases, 20, odds, 3m, 3m, 25m, -12m, cases > 0 ? baseRate : null, cases > 0 ? edge : 0);
 
     private static AssetOddsDto Odds(OddsForPeriodDto threeMonths, TradeReadDto? read) =>
         new("XLK", "Technology ETF", 40, 250m, Period(30), threeMonths, Period(30), [], "d", null, read);

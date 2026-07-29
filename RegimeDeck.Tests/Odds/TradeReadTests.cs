@@ -18,14 +18,10 @@ public class TradeReadTests
             MedianReturn: median,
             BestCase: 25m,
             WorstCase: worst,
-            PriceTargetLow: null,
-            PriceTargetMid: null,
-            PriceTargetHigh: null,
             BaseRate: baseRate,
             Edge: Math.Round(odds - baseRate, 1));
 
-    private static readonly OddsForPeriodDto Empty =
-        new(0, 0, 0, 0, 0, 0, 0, null, null, null);
+    private static readonly OddsForPeriodDto Empty = new(0, 0, 0, 0, 0, 0, 0);
 
     [Fact]
     public void ConsistentPositiveEdge_LongBias_Strong()

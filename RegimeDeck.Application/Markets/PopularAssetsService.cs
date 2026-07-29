@@ -74,12 +74,12 @@ public class PopularAssetsService : IPopularAssetsService
             double? odds3M = null, baseRate3M = null, edge3M = null;
             try
             {
-                var odds = await _odds.GetOddsForDaysAsync(symbol, 90, ct: ct);
-                if (odds.Odds.TotalCases > 0)
+                var odds = await _odds.GetOddsAsync(symbol, ct);
+                if (odds.ThreeMonths.TotalCases > 0)
                 {
-                    odds3M = odds.Odds.PositiveOdds;
-                    baseRate3M = odds.Odds.BaseRate;
-                    edge3M = odds.Odds.Edge;
+                    odds3M = odds.ThreeMonths.PositiveOdds;
+                    baseRate3M = odds.ThreeMonths.BaseRate;
+                    edge3M = odds.ThreeMonths.Edge;
                 }
             }
             catch

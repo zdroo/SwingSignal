@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RegimeDeck.Application.Analytics;
 using RegimeDeck.Application.Auth;
 using RegimeDeck.Application.Backtesting;
+using RegimeDeck.Application.Liquidity;
 using RegimeDeck.Application.MacroData;
 using RegimeDeck.Application.Markets;
 using RegimeDeck.Application.Odds;
@@ -21,6 +22,8 @@ public static class DependencyInjection
 
         services.AddScoped<MacroSnapshotBuilder>();
         services.AddScoped<IMacroRegimeService, MacroRegimeService>();
+        services.AddScoped<IRegimePlaybookService, RegimePlaybookService>();
+        services.AddScoped<ILiquidityService, LiquidityService>();
         services.AddScoped<IMacroQueryService, MacroQueryService>();
         services.AddScoped<IAssetExplainerService, MacroExplainerService>();
         services.AddScoped<IHistoricalOddsService, HistoricalOddsService>();

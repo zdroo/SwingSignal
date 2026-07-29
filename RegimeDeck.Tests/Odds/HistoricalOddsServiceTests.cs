@@ -64,7 +64,7 @@ public class HistoricalOddsServiceTests
     }
 
     [Fact]
-    public async Task GetOddsForDaysAsync_RisingSeries_ExactNumbers()
+    public async Task GetOddsAsync_RisingSeries_ExactNumbers()
     {
         var candles = RisingCandles();
         // Two analogs with equal similarity => equal kernel weights.
@@ -76,15 +76,14 @@ public class HistoricalOddsServiceTests
         };
         var service = BuildService(candles, matches, out _);
 
-        var result = await service.GetOddsForDaysAsync("SPY", days: 90);
+        var result = await service.GetOddsAsync("SPY");
 
         Assert.Equal("SPY", result.Symbol);
         Assert.Equal("S&P 500 ETF", result.Name);
-        Assert.Equal(90, result.Days);
         Assert.Equal(2, result.MatchesUsed);
         Assert.Equal(600m, result.CurrentPrice);
 
-        var odds = result.Odds;
+        var odds = result.ThreeMonths;
         Assert.Equal(2, odds.TotalCases);
         Assert.Equal(2, odds.PositiveCases);
 
@@ -97,12 +96,7 @@ public class HistoricalOddsServiceTests
         Assert.Equal(89.11m, odds.BestCase);
         Assert.Equal(44.78m, odds.WorstCase);
         Assert.Equal(66.94m, odds.AverageReturn); // (89.11+44.78)/2 = 66.945, banker's rounding
-
-        // Equal weights: P25 and P50 hit the first sorted return, P75 the second
-        Assert.Equal(44.78m, odds.MedianReturn);
-        Assert.Equal(600m * 1.4478m, odds.PriceTargetLow);
-        Assert.Equal(600m * 1.4478m, odds.PriceTargetMid);
-        Assert.Equal(600m * 1.8911m, odds.PriceTargetHigh);
+        Assert.Equal(44.78m, odds.MedianReturn);   // equal weights: median hits the first sorted return
     }
 
     [Fact]
@@ -223,16 +217,5 @@ public class HistoricalOddsServiceTests
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => service.GetOddsAsync("NOPE"));
         Assert.Equal("Asset NOPE not found", ex.Message);
-    }
-
-    [Theory]
-    [InlineData(6)]
-    [InlineData(366)]
-    public async Task GetOddsForDaysAsync_OutOfRangeDays_Throws(int days)
-    {
-        var service = BuildService(RisingCandles(), [], out _);
-
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            service.GetOddsForDaysAsync("SPY", days));
     }
 }

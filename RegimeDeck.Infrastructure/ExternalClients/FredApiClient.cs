@@ -36,6 +36,13 @@ public class FredApiClient
         [MacroIndicatorType.HousingStarts]     = "HOUST",
         [MacroIndicatorType.HighYieldSpread]   = "BAMLH0A0HYM2",
         [MacroIndicatorType.SahmRule]          = "SAHMREALTIME",
+
+        // Global-liquidity inputs
+        [MacroIndicatorType.TreasuryGeneralAccount] = "WTREGEN",
+        [MacroIndicatorType.EcbBalanceSheet]        = "ECBASSETSW",
+        [MacroIndicatorType.BojBalanceSheet]        = "JPNASSETS",
+        [MacroIndicatorType.EurUsd]                 = "DEXUSEU",
+        [MacroIndicatorType.JpyUsd]                 = "DEXJPUS",
     };
 
     public FredApiClient(HttpClient http, IConfiguration config, ILogger<FredApiClient> logger)

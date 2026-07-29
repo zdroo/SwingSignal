@@ -166,16 +166,12 @@ are weighted — an intentional but real definitional difference. `TotalCases` a
 `PositiveCases` are likewise **raw counts**, so `PositiveCases / TotalCases` will
 not equal the weighted, shrunk `PositiveOdds`.
 
-### 11. Price targets
-`ComputeOdds`
-
-`PriceTarget{Low,Mid,High} = currentPrice × (1 + {P25,P50,P75}/100)`, using the
-same weighted percentiles of the analog return distribution (2dp).
-
-**Verdict ✔** (with note ⚠). Internally consistent with the median. **Note:** these
-are **percentiles of the analog outcomes**, not guaranteed bands — in a bearish
-regime even `PriceTargetHigh` (P75, labelled "Optimistic") can sit **below** the
-current price. The label denotes distribution position, not a guaranteed gain.
+### 11. Price targets — REMOVED (2026-07-29)
+Absolute price targets (`currentPrice × (1 + {P25,P50,P75}/100)`) were removed in
+the honesty reframe: a specific future price from a few dozen overlapping analogs
+is false precision. The outcome *range* is now surfaced instead — `BestCase` /
+`WorstCase` / `MedianReturn` as returns, framed as risk, not a target. The
+per-horizon `/period` custom-window endpoint was removed with it.
 
 ### 12. Statistical read (stance & strength)
 `TradeRead.Compute`
@@ -218,16 +214,12 @@ Each endpoint's odds fields and how they're produced (all reference Part I).
 ### `GET /api/regime/odds/{symbol}` → `AssetOddsDto`
 The full per-asset read. Runs Part I for **three** horizons:
 - `OneMonth` (N=30), `ThreeMonths` (N=90), `SixMonths` (N=180) — each an
-  `OddsForPeriodDto` (§7–§11): PositiveOdds, Edge, BaseRate, Average/Median/Best/
-  Worst return, PriceTarget Low/Mid/High, Total/PositiveCases.
+  `OddsForPeriodDto` (§7–§10): PositiveOdds, Edge, BaseRate, Average/Median/Best/
+  Worst return, Total/PositiveCases.
 - `MatchesUsed` = analog count (§4). `CurrentPrice` = latest close.
 - `TradeRead` (§12), `Breakdown` (§13), `Explanations` (narrative, non-numeric).
 - Crypto uses the crypto dimension subset and the short-horizon profile for N≤45
   (`MatchingOptions.ForMarket`); the math is otherwise identical.
-
-### `GET /api/regime/odds/{symbol}/period?days=N` → `AssetPeriodOddsDto`
-Part I for **one** user-chosen horizon `N ∈ [7,365]`. Same `OddsForPeriodDto`
-(§7–§11). Auth-gated; recomputes on demand.
 
 ### `GET /api/regime/matches?topK` → `HistoricalMatchDto[]`
 The analog list itself (§3–§4): `SimilarityScore = S` (1dp), `TopPercent =
@@ -292,11 +284,9 @@ Pages, the endpoints they call, and the odds they surface. (Endpoints appear onc
 in Part II; shared ones are cross-referenced.)
 
 ### `/odds/[symbol]` — the per-asset page (the odds showcase)
-- **`GET /api/regime/odds/{symbol}`** → 1M/3M/6M outlooks (`PeriodTargets`), the
-  P25/P50/P75 **price-target cards** ("Conservative / Base Case / Optimistic"),
-  the **TradeRead** card (stance + strength + reasons), and the MA200 breakdown.
-- **`GET /api/regime/odds/{symbol}/period`** (`PeriodPredictor`) → custom-horizon
-  odds + targets.
+- **`GET /api/regime/odds/{symbol}`** → the 1M/3M/6M odds table (`OddsTable`), the
+  **ConfidenceRisk** cards (sample-size confidence + 3-month outcome range), the
+  **TradeRead** card (stance + strength + reasons), and the MA200 breakdown.
 - **`GET /api/backtest/{symbol}`** (`BacktestPanel`) → accuracy/Brier/calibration —
   the "how accurate is this?" proof.
 - `GET /api/candles/{symbol}` + `GET /api/regime/matches` (`PriceChart`) → price
@@ -304,7 +294,8 @@ in Part II; shared ones are cross-referenced.)
 - `GET /api/events/upcoming` (`UpcomingEventsBanner`) → non-numeric.
 
 > Every headline probability on this page is §7 `PositiveOdds`; every "vs base
-> rate" is §8/§9; every price band is §11.
+> rate" is §8/§9; the outcome range is `BestCase`/`WorstCase` (§10). Price targets
+> were removed (§11).
 
 ### `/dashboard`
 - `GET /api/regime/current` → market-health & indicators (descriptive, **not odds**).

@@ -103,35 +103,4 @@ public class ProGateTests : IClassFixture<ProEnabledApiFactory>
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    // ── Custom-window daily quota ─────────────────────────────────────────
-
-    [Fact]
-    public async Task CustomWindow_Free_CappedAtDailyLimit()
-    {
-        var token = await RegisterAsync();
-
-        for (var i = 0; i < ProFeatures.CustomWindowDailyLimit; i++)
-        {
-            var ok = await _client.SendAsync(Get("/api/regime/odds/SPY/period?days=45", token));
-            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
-        }
-
-        var over = await _client.SendAsync(Get("/api/regime/odds/SPY/period?days=45", token));
-
-        Assert.Equal(HttpStatusCode.TooManyRequests, over.StatusCode);
-        using var doc = JsonDocument.Parse(await over.Content.ReadAsStringAsync());
-        Assert.Contains("Pro removes this cap", doc.RootElement.GetProperty("message").GetString());
-    }
-
-    [Fact]
-    public async Task CustomWindow_Pro_Unlimited()
-    {
-        var token = await RegisterAsync(UserPlan.Pro);
-
-        for (var i = 0; i < ProFeatures.CustomWindowDailyLimit + 1; i++)
-        {
-            var response = await _client.SendAsync(Get("/api/regime/odds/SPY/period?days=45", token));
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        }
-    }
 }
