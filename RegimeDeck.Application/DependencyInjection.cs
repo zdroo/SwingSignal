@@ -5,6 +5,7 @@ using RegimeDeck.Application.Backtesting;
 using RegimeDeck.Application.Liquidity;
 using RegimeDeck.Application.MacroData;
 using RegimeDeck.Application.Markets;
+using RegimeDeck.Application.Portfolio;
 using RegimeDeck.Application.Odds;
 using RegimeDeck.Application.Events;
 using RegimeDeck.Application.Regime;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<IMacroRegimeService, MacroRegimeService>();
         services.AddScoped<IRegimePlaybookService, RegimePlaybookService>();
         services.AddScoped<ILiquidityService, LiquidityService>();
+        services.AddScoped<IPortfolioXrayService, PortfolioXrayService>();
         services.AddScoped<IMacroQueryService, MacroQueryService>();
         services.AddScoped<IAssetExplainerService, MacroExplainerService>();
         services.AddScoped<IHistoricalOddsService, HistoricalOddsService>();
