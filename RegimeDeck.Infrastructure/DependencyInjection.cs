@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<IWatchlistRepository, WatchlistRepository>();
         services.AddScoped<IAlertStateRepository, AlertStateRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<IScreenerRepository, ScreenerRepository>();
         services.AddScoped<ISectorRotationRepository, SectorRotationRepository>();
         services.AddScoped<IEconomicEventRepository, EconomicEventRepository>();
@@ -84,6 +85,7 @@ public static class DependencyInjection
             services.AddHostedService<UnconfirmedAccountCleanupService>();
             services.AddHostedService<WeeklyReportService>();
             services.AddHostedService<AlertEvaluationService>();
+            services.AddHostedService<CustomAlertEvaluationService>();
             services.AddHostedService<ScreenerComputeService>();
             services.AddHostedService<SectorRotationComputeService>();
             services.AddHostedService<EconomicCalendarIngestionService>();

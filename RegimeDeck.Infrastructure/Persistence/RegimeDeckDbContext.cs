@@ -16,6 +16,7 @@ public class RegimeDeckDbContext : DbContext
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
     public DbSet<WatchlistItem> WatchlistItems => Set<WatchlistItem>();
     public DbSet<AlertState> AlertStates => Set<AlertState>();
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<ScreenerRow> ScreenerRows => Set<ScreenerRow>();
     public DbSet<SectorRotationRow> SectorRotationRows => Set<SectorRotationRow>();
     public DbSet<EconomicEvent> EconomicEvents => Set<EconomicEvent>();

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using RegimeDeck.Application.Alerts;
 using RegimeDeck.Application.Analytics;
 using RegimeDeck.Application.Auth;
 using RegimeDeck.Application.Backtesting;
@@ -26,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IRegimePlaybookService, RegimePlaybookService>();
         services.AddScoped<ILiquidityService, LiquidityService>();
         services.AddScoped<IPortfolioXrayService, PortfolioXrayService>();
+        services.AddScoped<IAlertRuleService, AlertRuleService>();
         services.AddScoped<IMacroQueryService, MacroQueryService>();
         services.AddScoped<IAssetExplainerService, MacroExplainerService>();
         services.AddScoped<IHistoricalOddsService, HistoricalOddsService>();
