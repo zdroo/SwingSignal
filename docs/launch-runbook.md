@@ -75,6 +75,30 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
       Worth repeating for any future environment change; it catches config errors without
       burning deploy cycles. (`Failed to determine the https port` is expected on local http.)
 
+### Deploy gotchas hit on 2026-07-30 (all cost real time — read before touching the deploy)
+- **The connection string belongs in *App settings*, not the *Connection strings* blade.** That
+  blade prefixes entries as env vars (`SQLCONNSTR_<name>`), and .NET maps `SQLCONNSTR_X` →
+  `ConnectionStrings:X`. Named `ConnectionStrings__SqlServer` there, it resolved to
+  `ConnectionStrings:ConnectionStrings:SqlServer`, so prod config fail-fast killed startup.
+  Either use an App setting named `ConnectionStrings__SqlServer` (what we did), or a
+  Connection-strings entry named just `SqlServer`.
+- **Publish the project, never the solution.** .NET 10 *allows* `dotnet publish -o` on a
+  solution, so Azure's generated workflow silently published all six projects into `wwwroot` —
+  test DLLs and a second `.runtimeconfig.json` included. Two runtimeconfigs = App Service can't
+  identify the entry point, so it serves `hostingstart.html` and every route 404s.
+- **Zip deploy merges; it does not replace.** Fixing the workflow wasn't enough — the earlier
+  junk stayed. Had to empty `wwwroot` (Kudu `POST /api/command`) and redeploy. `az webapp deploy
+  --clean` returned Kudu 400, and local `Compress-Archive` zips are rejected too (backslash
+  entry paths) — re-running the GitHub workflow is the reliable route.
+- **"Secure unique default hostname" is on by default**, so the host is
+  `<app>-<hash>.<region>-01.azurewebsites.net`, not `<app>.azurewebsites.net`. Read it off
+  Overview → Default domain.
+- **A 500 right after first boot is probably not a bug.** `/api/regime/current` timed out at 30s
+  while the initial backfill was running (index present, DTU idle — pure contention). It returns
+  in ~1s once ingestion settles. Re-test before investigating.
+- Diagnosis needs `az`; the portal can't show `wwwroot` contents or the container log. Useful:
+  `az webapp config appsettings list`, and Kudu `api/command` for `ls`/`grep` over `/home/LogFiles`.
+
 ## Phase 3 — Configure the FE (Vercel env)
 - [ ] `NEXT_PUBLIC_API_URL=https://api.regimedeck.com`
 - [ ] `NEXT_PUBLIC_SITE_URL=https://regimedeck.com`
