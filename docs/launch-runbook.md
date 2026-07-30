@@ -40,31 +40,40 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
 > **Status (2026-07-30) — UNBLOCKED.** The quota was never granted; the fix was to stop asking.
 > East US had no capacity for a new subscription, and **creating the Web App in France worked
 > immediately**. Lesson for any future Azure resource here: try another region before filing a
-> quota ticket. **Consequence:** the App Service is now in France while the Azure SQL is still
-> in East US — a transatlantic hop on every query. Fix before first deploy by recreating the
-> (still-empty) database in the App Service's region; take the chance to provision it as
-> **Standard S0/S1**, not serverless, per the cost note below.
+> quota ticket. **Regions:** App Service = **France Central** (Central US and East US 2 both
+> refused too — France was the one that took). Azure SQL = **Germany West Central**, so the split
+> is intra-EU (~10ms), not transatlantic — so the DB was recreated in France Central as
+> **Standard S0** while it was still empty: same-region latency, no inter-region egress, and
+> the move off serverless in one action. **Windows→Linux:** the first Web App was created on
+> **Windows**, which is ~4x the price of Linux at B1 (~$55 vs $13.14/mo) for an app with zero
+> Windows dependencies. Replaced with a Linux B1 before deploying. **Running Azure cost: ~$31/mo**
+> (App Service $13.14 + SQL S0 $18.40), against the ~$190/mo the original serverless setup implied.
 
 ## Phase 1 — Provision
-- [ ] **Database** — Azure SQL, **same region as the App Service**, **Standard S0 or S1 (DTU),
-      not serverless**. Serverless bills per vCore-second whenever the DB is online, and the
-      background jobs (densest cadence 4h) plus real traffic mean it effectively never
-      auto-pauses: the free grant is ~100k vCore-seconds (~55h at a 0.5 vCore floor, ~7% of a
-      month), after which it runs ~$80-175/mo. S0 is a flat ~$15. Get the connection string.
-- [ ] **API host with HTTPS** — Azure App Service (Linux, .NET 10) simplest; VPS needs
-      Caddy/nginx + certbot. HTTPS is mandatory (the refresh cookie is `Secure`).
+- [x] **Database** — Azure SQL `regime-deck-fc` / `RegimeDeck`, **France Central**, **Standard S0
+      (DTU)**, locally-redundant backups. *Not serverless*: it bills per vCore-second whenever the
+      DB is online, and the background jobs (densest cadence 4h) plus real traffic mean it never
+      auto-pauses — the free grant is ~100k vCore-seconds (~55h at a 0.5 vCore floor, ~7% of a
+      month), after which it runs ~$80-175/mo. S0 is a flat ~$18.40. *(2026-07-30)*
+- [x] **API host with HTTPS** — Azure App Service `regime-deck-wa-linux`, **Linux B1, France
+      Central, .NET 10**, Always On enabled. *(2026-07-30)*
 - [ ] **FE** — Vercel project linked to `swing-signal-web`.
 
 ## Phase 2 — Configure the API (prod env)
-- [ ] `ConnectionStrings:SqlServer`
-- [ ] `Jwt:Secret` (fresh), `Jwt:Issuer=RegimeDeck`, `Jwt:Audience=RegimeDeckWeb`
-- [ ] `Google:ClientId` (dedicated)
-- [ ] `Resend:ApiKey`, `Resend:From="RegimeDeck <you@regimedeck.com>"`, **remove** `Resend:DevRedirectTo`
-- [ ] `Fred:ApiKey`
-- [ ] `Frontend:Url=https://regimedeck.com` — exact, no trailing slash (drives CORS + CSRF Origin check)
-- [ ] `ForwardedHeaders:Enabled=true`
-- [ ] `ASPNETCORE_ENVIRONMENT=Production`, `Features:ProEnabled=false`
-- [ ] First boot auto-migrates + seeds; wait ~30 min for boards to populate. Allow outbound (FRED/Yahoo/Binance).
+- [x] `ConnectionStrings__SqlServer` — note App Service on Linux needs `__`, not `:`
+- [x] `Jwt__Secret` (fresh 64-byte base64), `Jwt:Issuer=RegimeDeck`, `Jwt:Audience=RegimeDeckWeb` (from appsettings)
+- [x] `Google__ClientId` (dedicated app, JS origin `https://regimedeck.com`)
+- [x] `Resend__ApiKey`, `Resend__From="RegimeDeck <noreply@regimedeck.com>"`, `Resend:DevRedirectTo` not set
+- [x] `Fred__ApiKey`
+- [x] `Frontend__Url=https://regimedeck.com` — exact, no trailing slash (drives CORS + CSRF Origin check)
+- [x] `ForwardedHeaders__Enabled=true`
+- [x] `ASPNETCORE_ENVIRONMENT=Production`, `Features__ProEnabled=false`
+- [x] **Validated from a local machine before deploying** (2026-07-30): booted the API with
+      `ASPNETCORE_ENVIRONMENT=Production` against the prod DB. Config fail-fast passed, all
+      **12** migrations applied (InitialCreate → AddAlertRules), 11 assets seeded, and FRED /
+      Binance / Yahoo / CoinMetrics ingestion all ran — so the DB is warm before first deploy.
+      Worth repeating for any future environment change; it catches config errors without
+      burning deploy cycles. (`Failed to determine the https port` is expected on local http.)
 
 ## Phase 3 — Configure the FE (Vercel env)
 - [ ] `NEXT_PUBLIC_API_URL=https://api.regimedeck.com`
