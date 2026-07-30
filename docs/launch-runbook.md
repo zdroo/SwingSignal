@@ -104,13 +104,27 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
 - Diagnosis needs `az`; the portal can't show `wwwroot` contents or the container log. Useful:
   `az webapp config appsettings list`, and Kudu `api/command` for `ls`/`grep` over `/home/LogFiles`.
 
-## Phase 3 — Configure the FE (Vercel env)
-- [ ] `NEXT_PUBLIC_API_URL=https://api.regimedeck.com`
-- [ ] `NEXT_PUBLIC_SITE_URL=https://regimedeck.com`
-- [ ] `NEXT_PUBLIC_GOOGLE_CLIENT_ID=<dedicated>`
-- [ ] `NEXT_PUBLIC_PRO_ENABLED=false`
+## Phase 3 — Configure the FE (Vercel env) — DONE 2026-07-30
+- [x] `NEXT_PUBLIC_API_URL=https://api.regimedeck.com`
+- [x] `NEXT_PUBLIC_SITE_URL=https://regimedeck.com`
+- [x] `NEXT_PUBLIC_GOOGLE_CLIENT_ID=<dedicated>`
+- [x] `NEXT_PUBLIC_PRO_ENABLED=false`
 - [ ] `NEXT_PUBLIC_UMAMI_SRC` + `NEXT_PUBLIC_UMAMI_WEBSITE_ID` (optional, can follow)
-- [ ] Deploy. DNS: apex/www → Vercel, `api` → API host.
+- [x] **Deployed.** `https://regimedeck.com` live on a Let's Encrypt cert.
+      DNS (Cloudflare, every record **DNS only / grey cloud**):
+      apex `@` CNAME → `<hash>.vercel-dns-017.com` (Cloudflare flattens at the apex),
+      `www` CNAME → same, `api` CNAME → the App Service host, `asuid.api` TXT → verification id.
+- [x] **`www` must REDIRECT, not serve.** Vercel's add-domain dialog offers "redirect apex to
+      www (recommended)" — leave it **unchecked**, because the apex is canonical here. But
+      unchecking it adds `www` as a plain alias that serves the site on its own hostname, which
+      is worse than either option: sign-in from `www` sends `Origin: https://www.regimedeck.com`,
+      which fails CORS and the Origin CSRF check against `Frontend__Url` and looks like a random
+      intermittent auth bug. Set `www` → Redirect → apex, 308. Verify with
+      `curl -o /dev/null -w "%{http_code} %{redirect_url}" https://www.regimedeck.com/`.
+- [x] **Verify the API base URL is in the client bundle**, not just that pages render. Server
+      rendering works off build-time fetches, so a missing `NEXT_PUBLIC_API_URL` still produces a
+      perfect-looking site while every client call silently falls back to `https://localhost:7260`
+      (`lib/api.ts`). Grep the `/_next/static/chunks/*.js` for the real host.
 
 ## Phase 4 — 🔴 Auth cookie smoke test (the new flow — verify in the real browser)
 - [ ] Register → `Set-Cookie: rd_refresh=…; Secure; HttpOnly; SameSite=None; Path=/api/auth`, land logged in.
