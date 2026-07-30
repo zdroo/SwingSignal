@@ -36,9 +36,21 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
 > Legal-page mailboxes corrected from the never-owned `regimedeck.app` to `regimedeck.com`.
 > Still blocked on the same App Service quota request — nothing else in Phase 1+ can start
 > until it clears (or we take the VPS fallback).
+>
+> **Status (2026-07-30) — UNBLOCKED.** The quota was never granted; the fix was to stop asking.
+> East US had no capacity for a new subscription, and **creating the Web App in France worked
+> immediately**. Lesson for any future Azure resource here: try another region before filing a
+> quota ticket. **Consequence:** the App Service is now in France while the Azure SQL is still
+> in East US — a transatlantic hop on every query. Fix before first deploy by recreating the
+> (still-empty) database in the App Service's region; take the chance to provision it as
+> **Standard S0/S1**, not serverless, per the cost note below.
 
 ## Phase 1 — Provision
-- [ ] **Database** — Azure SQL (easiest) or SQL Server on a VPS. Get connection string.
+- [ ] **Database** — Azure SQL, **same region as the App Service**, **Standard S0 or S1 (DTU),
+      not serverless**. Serverless bills per vCore-second whenever the DB is online, and the
+      background jobs (densest cadence 4h) plus real traffic mean it effectively never
+      auto-pauses: the free grant is ~100k vCore-seconds (~55h at a 0.5 vCore floor, ~7% of a
+      month), after which it runs ~$80-175/mo. S0 is a flat ~$15. Get the connection string.
 - [ ] **API host with HTTPS** — Azure App Service (Linux, .NET 10) simplest; VPS needs
       Caddy/nginx + certbot. HTTPS is mandatory (the refresh cookie is `Secure`).
 - [ ] **FE** — Vercel project linked to `swing-signal-web`.
