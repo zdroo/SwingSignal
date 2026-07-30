@@ -23,17 +23,25 @@ jobs:
         with:
           dotnet-version: '10.x'
 
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
+      # Whole solution: Directory.Build.props enforces TreatWarningsAsErrors,
+      # so building everything is the warning-free gate.
+      - name: Build
+        run: dotnet build RegimeDeck.slnx --configuration Release
 
-      - name: dotnet publish
-        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
+      # ci.yml runs in parallel and so can't hold back a deploy — gate here too.
+      - name: Test
+        run: dotnet test RegimeDeck.Tests/RegimeDeck.Tests.csproj --configuration Release --no-build
+
+      # Name the project. Publishing the solution sweeps in the test project and
+      # fails NETSDK1194 (--output is unsupported when publishing a solution).
+      - name: Publish
+        run: dotnet publish RegimeDeck.Api/RegimeDeck.Api.csproj -c Release -o publish
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
+          path: publish
 
   deploy:
     runs-on: ubuntu-latest
