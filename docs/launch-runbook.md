@@ -126,11 +126,21 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
       perfect-looking site while every client call silently falls back to `https://localhost:7260`
       (`lib/api.ts`). Grep the `/_next/static/chunks/*.js` for the real host.
 
-## Phase 4 — 🔴 Auth cookie smoke test (the new flow — verify in the real browser)
-- [ ] Register → `Set-Cookie: rd_refresh=…; Secure; HttpOnly; SameSite=None; Path=/api/auth`, land logged in.
-- [ ] Hard reload → still logged in (`POST /api/auth/refresh` → 200).
-- [ ] Logout → next refresh is 401.
-- [ ] If reload logs you out: `Frontend:Url` mismatch, or cookie not `Secure`/`SameSite=None` (HTTPS/forwarded-headers not wired).
+## Phase 4 — 🔴 Auth cookie smoke test — PASSED 2026-07-30
+- [x] Google sign-in works end to end on the apex.
+- [x] Hard reload → still logged in (`POST /api/auth/refresh` → 200), cookie `HttpOnly` +
+      `Secure` + `SameSite=None` + `Path=/api/auth`.
+- [x] Logout → next refresh is 401.
+- [x] Server-side checks verified against the live API by curl, worth repeating after any origin
+      or CORS change:
+      - preflight from `https://regimedeck.com` → 204, `Allow-Credentials: true`,
+        `Allow-Origin: https://regimedeck.com`
+      - refresh with correct Origin but no cookie → **401**
+      - refresh from an unrelated origin → **403** "Cross-origin refresh rejected."
+      - refresh from `https://www.regimedeck.com` → **403** — the concrete reason www has to
+        redirect rather than serve.
+- [ ] If a reload ever logs users out: 401 = cookie not sent (`SameSite`/`Secure`), 403 = Origin
+      mismatch against `Frontend__Url`.
 
 ## Phase 5 — Smoke tests
 - [ ] `/health` 200 · Google sign-in · email round-trip (real inbox) · odds page + backtest + screener + sectors render with data · OG preview · robots/sitemap. Submit sitemap to Search Console.
