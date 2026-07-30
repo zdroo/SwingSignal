@@ -57,6 +57,11 @@ Google's authorized origin must all be exactly `https://regimedeck.com`, no trai
       month), after which it runs ~$80-175/mo. S0 is a flat ~$18.40. *(2026-07-30)*
 - [x] **API host with HTTPS** — Azure App Service `regime-deck-wa-linux`, **Linux B1, France
       Central, .NET 10**, Always On enabled. *(2026-07-30)*
+- [x] **API custom domain** — `api.regimedeck.com` bound with a free App Service Managed
+      Certificate (SNI, DigiCert, auto-renewing). DNS is Cloudflare: CNAME `api` → the app's
+      default host, plus TXT `asuid.api` = the custom-domain verification ID. **Both must be
+      "DNS only" (grey cloud)** — Cloudflare's proxy terminates TLS itself, which blocks both
+      issuance and auto-renewal of the managed cert. *(2026-07-30)*
 - [ ] **FE** — Vercel project linked to `swing-signal-web`.
 
 ## Phase 2 — Configure the API (prod env)
