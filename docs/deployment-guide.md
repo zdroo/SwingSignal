@@ -1,460 +1,689 @@
-# How RegimeDeck Was Deployed
+# Deploying RegimeDeck — the reasoning, not just the steps
 
-The end-to-end account of getting RegimeDeck from a purchased domain to a live
-site, written so it could be repeated on a second environment. `launch-runbook.md`
-is the *status* checklist; this is the *procedure*, including the things that went
-wrong, because most of the elapsed time went into those rather than the happy path.
+How RegimeDeck went from a purchased domain to a live site, written so the *decisions*
+transfer to the next project. `launch-runbook.md` is the status checklist; this explains
+what each piece is, why it exists, and why we did things in the order we did.
 
-**Final topology**
+**Where it ended up**
 
-| Piece | Where | Notes |
+| Piece | Where | What it is |
 |---|---|---|
-| Frontend | Vercel, `regimedeck.com` | Next.js 16, Let's Encrypt cert |
-| API | Azure App Service, `api.regimedeck.com` | Linux **B1**, France Central, .NET 10, Always On |
-| Database | Azure SQL `RegimeDeck` on `regime-deck-fc` | **Standard S0 (DTU)**, France Central |
-| DNS | Cloudflare | every record **DNS only / grey cloud** |
-| CI/CD | GitHub Actions | OIDC to Azure, no publish profile |
+| Frontend | Vercel, `regimedeck.com` | Next.js — build pipeline + CDN + serverless renderer |
+| API | Azure App Service, `api.regimedeck.com` | Linux B1, France Central, .NET 10, Always On |
+| Database | Azure SQL, `regime-deck-fc` | Standard S0 (DTU), France Central |
+| DNS | Cloudflare | authoritative nameservers for the zone |
+| CI/CD | GitHub Actions | OIDC into Azure, no stored credentials |
 
-Running cost ≈ **$31/mo** (App Service $13.14 + SQL $18.40).
-
----
-
-## 1. Domain
-
-`regimedeck.com` registered, nameservers pointed at Cloudflare.
-
-**The one decision that everything else keys off: apex vs www.** We chose the
-**apex**, `https://regimedeck.com`. That exact string — no trailing slash, `https`,
-no `www` — has to appear identically in four places:
-
-- `Frontend__Url` (API app setting) — drives CORS **and** the Origin CSRF check
-- `NEXT_PUBLIC_SITE_URL` (Vercel) — canonicals, sitemap, OG tags
-- Google OAuth **Authorized JavaScript origins**
-- Vercel's primary domain
-
-Decide this before provisioning anything. Changing it later means editing all four
-and rebuilding the frontend.
+≈ **$31/mo** (App Service $13.14 + SQL $18.40).
 
 ---
 
-## 2. Azure — database
+# Part I — The mental model
 
-Created via Portal → **SQL Database**.
+Four independent systems had to be introduced to each other. Most deployment pain comes
+from not knowing which one owns what.
 
-| Setting | Value | Why |
-|---|---|---|
-| Resource group | `regimedeck-rg` | |
-| Server | `regime-deck-fc`, **France Central** | must match the App Service region |
-| Auth | SQL authentication | the app uses a connection string |
-| Purchasing model | **DTU → Standard → S0** | see below |
-| Backup redundancy | **Locally-redundant** | data is re-ingestible; geo-redundant costs ~2× |
-| Networking | Public endpoint, **Allow Azure services = Yes**, add client IP | |
-| Collation | `SQL_Latin1_General_CP1_CI_AS` (default) | matches local dev; unchangeable later |
+**Azure App Service** runs your server process. **Azure SQL** stores your data.
+**Vercel** builds and serves your frontend. **Cloudflare** answers the question "what IP
+is `regimedeck.com`?" for the entire internet. **GitHub** holds the code and is the
+trigger that moves new code into the first two.
 
-### ⚠ Do not use the serverless "free offer" for this workload
+None of them know about each other by default. Deployment is almost entirely the work of
+creating references between them — a connection string, a DNS record, a trust
+relationship, an allowed origin — and every one of those references is a string that has
+to match exactly on both sides. Nearly every failure in this deployment was a mismatched
+or misplaced reference, not broken code.
 
-The free offer grants **100,000 vCore-seconds/month** — about **55 hours** online at
-the 0.5 vCore floor, roughly 7% of a month. Auto-pause needs 60 minutes with zero
-connections, but RegimeDeck runs **11 background services** whose densest cadence is
-4 hours (~27 wake-ups/day, average gap ~53 min). It therefore *never* pauses, and:
+## Why the order was: database → compute → CI → domain → frontend → OAuth
 
-- set to "pause when exhausted" → the database goes offline ~27 days of every month
-- set to "bill overage" → roughly **$80–175/mo**
-
-Fixed-price **S0 at ~$18.40** is both cheaper and predictable. The blade defaults to
-vCore/serverless, and it silently reverted to **Hyperscale, 2 vCores ($333/mo)** once
-during setup — always re-read the price on the confirmation screen before creating.
-Hyperscale is close to one-way; you cannot scale back to Standard without export/import.
-
-### The free-offer region trap
-
-Creating a second free-offer database fails with *"All free databases must be in the
-same region."* The fix is **not** to delete anything — it's to **untick the free-offer
-checkbox** on the Basics tab. The region restriction only applies to free-offer databases.
-
----
-
-## 3. Azure — App Service
-
-### Quota: change region, don't file a ticket
-
-`Total VMs = 0` on a newly upgraded Pay-As-You-Go subscription blocked B1 creation in
-**East US**. A quota-increase ticket sat unanswered for six days. **Central US** and
-**East US 2** also refused. **France Central worked immediately.**
-
-Lesson: on a new subscription, a zero VM quota is usually regional capacity, not an
-account limit. Try other regions first — it takes two minutes versus days of waiting.
-
-### Linux, not Windows
-
-The first Web App was created on **Windows**, which is ~4× the price of Linux at B1
-(~$55 vs **$13.14**/mo) for an app with zero Windows dependencies. The OS is fixed at
-App Service *plan* creation, so this meant a new plan **and** a new web app.
-
-Create the **Web App** (not the plan separately) — the plan is created underneath:
-
-- Publish: **Code** · Runtime: **.NET 10 (LTS)** · OS: **Linux** · Region: **France Central**
-- Pricing: **Basic B1** · then **Configuration → General settings → Always On: On**
-
-**Always On is mandatory here.** Without it the platform unloads the app after ~20
-minutes idle and all 11 background services stop with it.
-
-### "Secure unique default hostname"
-
-On by default, and it changes the hostname to
-`<app>-<hash>.<region>-01.azurewebsites.net` rather than `<app>.azurewebsites.net`.
-Read the real value from **Overview → Default domain** — it is not guessable.
-
-### App settings
-
-**Environment variables → App settings**, using `__` (double underscore), never `:`.
+The order is forced by a **dependency graph**, where each step needs an identifier that
+only the previous step can produce:
 
 ```
-ConnectionStrings__SqlServer   <full ADO.NET string, real password>
-Jwt__Secret                    <fresh 64 random bytes, base64>
+Database ──(connection string)──► App Service ──(app's hostname)──► DNS record
+                                       │                                │
+                                       │                          (cert issuance)
+                                       ▼                                ▼
+                                 GitHub OIDC trust              api.regimedeck.com
+                                                                        │
+                                                          (NEXT_PUBLIC_API_URL)
+                                                                        ▼
+                                                                     Vercel
+                                                                        │
+                                                             (the final origin)
+                                                                        ▼
+                                                                 Google OAuth
+```
+
+Concretely:
+
+**The database comes first because the API cannot start without it.** `Program.cs`
+fail-fasts in Production when `ConnectionStrings:SqlServer` is missing, and on first boot
+the app runs `db.Database.Migrate()` before serving anything. The database is a hard
+dependency of the process — so it has to exist, and its connection string has to be in
+hand, before the compute that consumes it is worth creating. Nothing about the database
+depends on the API, so the arrow only points one way.
+
+**Compute comes second because it produces the hostname everything downstream needs.**
+You cannot write a DNS record for the API until Azure has told you what to point at.
+
+**CI/CD is wired next because it's how code gets onto that compute**, and because it's far
+easier to debug a deploy pipeline against a default `*.azurewebsites.net` hostname than to
+debug it and a custom domain simultaneously. Keep the number of things that could be
+wrong small.
+
+**The custom domain and its certificate come after that**, because certificate issuance
+validates against live DNS — the domain has to resolve to the app before a certificate
+authority will vouch for it. That ordering is not a preference; it is mechanically
+required.
+
+**The frontend comes next because its build bakes in the API's address.** `NEXT_PUBLIC_*`
+values are compiled into the JavaScript bundle at build time, so `api.regimedeck.com` must
+be final before Vercel builds, or you rebuild.
+
+**OAuth comes last because it needs the final, canonical frontend origin** — Google
+validates the origin the browser reports, so that string can't be settled until the
+frontend's domain is.
+
+## Where we deviated, and what it cost
+
+We created the database *before* knowing where compute could actually be provisioned. The
+App Service quota then forced us into France Central while the database sat in Germany
+West Central — so it had to be recreated.
+
+The general rule this teaches: **establish where your compute can live before placing
+anything it depends on.** Compute is the constrained resource (quotas, SKU availability,
+region capacity); databases will happily be created almost anywhere. Provision the scarce
+thing first, then colocate around it.
+
+It only cost minutes because the database was still empty. Which is itself the lesson —
+**the cheapest moment to move infrastructure is before it holds data**, so any doubt about
+placement should be resolved immediately rather than after go-live.
+
+---
+
+# Part II — Azure SQL
+
+## Why a managed database rather than one on the server
+
+We could have run SQL Server in a container next to the API. A managed database instead
+means backups, patching, TLS, and high availability are somebody else's job — you're
+buying operational time, which for a solo pre-revenue project is the scarcest resource.
+The trade is cost and a small amount of control.
+
+## Why colocation matters more than it looks
+
+The API and database ended up in the same region, and that is worth being deliberate
+about. Every EF Core query is a network round trip. In-region is roughly **1 ms**;
+across Europe roughly **10 ms**; across the Atlantic roughly **100 ms**.
+
+That difference is invisible for a request-driven app doing two queries. RegimeDeck's
+screener and sector-rotation jobs run query loops, so a per-query latency of 100 ms
+turns seconds of work into minutes, on every cycle, forever. Colocation isn't
+micro-optimisation here — it's the difference between a background job finishing and one
+that never catches up.
+
+Placing compute inside Azure also collapses the database firewall problem. Azure SQL's
+firewall is an IP allowlist; hosts outside Azure have rotating egress IPs, so you'd end
+up opening the database to `0.0.0.0/0` with only the password as a boundary. With the API
+in Azure, the **"Allow Azure services"** toggle replaces IP management entirely and the
+database is never publicly reachable.
+
+## Why Standard S0 and not the free serverless tier
+
+This is the decision with the largest cost swing, and it's arithmetic rather than taste.
+
+**Serverless** bills per *vCore-second whenever the database is online*, and pauses after
+a configurable idle period (minimum 60 minutes with zero connections). Its free grant is
+**100,000 vCore-seconds/month** — at the 0.5 vCore floor, about **55 hours**, roughly 7%
+of a month.
+
+That model pays off only for databases that are genuinely idle most of the time. Ours
+never is: **11 background services**, densest cadence 4 hours, roughly 27 wake-ups a day,
+average gap ~53 minutes — below the 60-minute pause threshold before a single visitor
+arrives. So the database is online ~730 hours a month, about **13× the grant**, and:
+
+- *"pause when exhausted"* → the database goes offline ~27 days of every month
+- *"bill overage"* → roughly **$80–175/mo**
+
+**DTU-based Standard S0** is a flat ~$18.40 for continuously-available capacity. Paying
+for steady capacity you continuously use is exactly what a fixed tier is for; serverless
+charges a premium rate for elasticity you can't exploit.
+
+> **On DTUs.** A DTU bundles CPU, memory and I/O into one number, so you turn a single
+> dial instead of sizing three things. It's simpler but opaque — you can't tell whether
+> you're CPU-bound or I/O-bound, or tune one axis. That's what the vCore model is for.
+> For a small predictable workload, DTU is cheaper and the opacity doesn't cost you
+> anything. Note that memory is *not* selectable in the DTU model; the storage slider is
+> data size, not RAM.
+
+**Watch the blade.** It defaults to vCore/serverless and once silently reverted to
+**Hyperscale, 2 vCores — $333/mo**. Always re-read the price on the confirmation screen.
+Hyperscale is effectively one-way; you can't scale back to Standard without export/import.
+
+Related trap: creating a second free-offer database fails with *"All free databases must
+be in the same region."* The fix isn't to delete anything — **untick the free-offer
+checkbox**. The restriction only applies to free-offer databases.
+
+## The other settings, and why
+
+- **Locally-redundant backups** — geo-redundant costs ~2× to protect data that is almost
+  entirely re-ingestible from FRED, Yahoo and Binance. A regional loss means re-running
+  ingestion, not losing anything irreplaceable.
+- **Collation `SQL_Latin1_General_CP1_CI_AS`** — matches local dev, so dev and prod behave
+  identically, and it's case-insensitive, which the email lookups rely on. It cannot be
+  changed after creation.
+- **Connection policy: Default** — in-Azure clients get Redirect (straight to the node,
+  lower latency), external clients get Proxy through the gateway. Forcing Redirect would
+  require ports 11000–11999 outbound, which home and office networks usually block.
+- **TLS 1.2 minimum**, `Encrypt=True;TrustServerCertificate=False` — `True` on that last
+  one disables certificate validation entirely, discarding TLS's protection against a
+  man-in-the-middle. Local dev sets it because localhost uses a self-signed certificate;
+  that reasoning does not carry to a public endpoint.
+
+---
+
+# Part III — Azure App Service
+
+## What it actually is
+
+App Service is a **managed process host** — Platform-as-a-Service. You hand it a compiled
+application; it provides the VM, the OS, the runtime, a public HTTPS endpoint, TLS
+termination, a load balancer, log collection and a deployment mechanism. You never touch
+the machine.
+
+The layer beneath is worth understanding, because it's where cost and constraints live:
+
+**App Service Plan** = the compute you rent — a VM (or several) of a given size, in a
+given region, running a given OS. **This is the thing you pay for.**
+
+**Web App** = an application running on that plan — a hostname, app settings, a
+deployment. Several web apps can share one plan, competing for its resources.
+
+Consequences that bit us:
+
+- **OS and region are fixed at the plan level.** Discovering the plan was Windows meant
+  creating a *new plan and a new web app* — you cannot flip an existing one.
+- **Cost is per plan, not per app.** Windows B1 is ~4× Linux B1 (~$55 vs **$13.14**) for
+  the same specs, because the price includes a Windows Server licence. For an app with no
+  Windows dependencies, that's pure waste.
+- **Scaling is a plan operation.** "Scale up" changes the SKU for everything on it.
+
+## Why Always On is mandatory here
+
+By default App Service unloads an idle app after ~20 minutes and reloads it on the next
+request. For a request-driven API that's fine — a slightly slow first request.
+
+RegimeDeck is not request-driven. It runs **11 `BackgroundService` instances** ingesting
+FRED, Binance and Yahoo data and computing the screener and sector rotation on timers.
+If the process is unloaded, *those stop too* — ingestion would only happen when somebody
+happened to visit. Always On keeps the process resident by pinging it periodically.
+
+This is also why every scale-to-zero platform was ruled out (Render's free tier, Cloud
+Run's default, Azure Consumption). **The shape of your workload, not its traffic, decides
+which hosting models are even eligible.**
+
+## Why the quota problem was solved by moving region
+
+A new Pay-As-You-Go subscription starts with a **`Total VMs` quota of 0** in many regions
+— fraud prevention, not a billing problem. East US refused B1; a quota-increase ticket sat
+unanswered for six days; Central US and East US 2 also refused. **France Central worked
+instantly.**
+
+The lesson generalises: on a new subscription, a zero VM quota usually reflects *regional
+capacity*, and trying another region takes two minutes against days of waiting on support.
+Try the cheap experiment before the expensive wait.
+
+Region choice has real consequences — France Central means EU data residency (helpful for
+GDPR) and ~80–120 ms extra latency for US visitors. For a macro dashboard, acceptable.
+
+## App settings: what they are and the trap
+
+App settings become **environment variables** in the container. .NET's configuration
+provider reads them, mapping `__` (double underscore) to the `:` hierarchy separator, so
+`ConnectionStrings__SqlServer` becomes `ConnectionStrings:SqlServer` in `IConfiguration`.
+Colons don't survive as environment variable names on Linux, hence the convention.
+
+```
+ConnectionStrings__SqlServer   <full ADO.NET string>
+Jwt__Secret                    <64 random bytes, base64>
 Google__ClientId               <dedicated OAuth client id>
-Resend__ApiKey                 <key>
-Resend__From                   RegimeDeck <noreply@regimedeck.com>
-Fred__ApiKey                   <key>
+Resend__ApiKey / Resend__From
+Fred__ApiKey
 Frontend__Url                  https://regimedeck.com
 ForwardedHeaders__Enabled      true
 ASPNETCORE_ENVIRONMENT         Production
 Features__ProEnabled           false
 ```
 
-`Resend__DevRedirectTo` must **not** be set in production.
+### ⚠ Why the connection string must NOT go in the "Connection strings" blade
 
-### ⚠ The connection string goes in App settings, NOT the "Connection strings" blade
+App Service has a separate *Connection strings* section, which looks like the obvious home
+for a connection string. It isn't — it applies **its own prefix** when creating the
+environment variable: an entry of type SQLServer named `X` becomes `SQLCONNSTR_X`.
 
-This cost an hour. That blade prefixes entries as environment variables
-(`SQLCONNSTR_<name>`), and .NET's configuration then maps `SQLCONNSTR_X` →
-`ConnectionStrings:X`. An entry named `ConnectionStrings__SqlServer` therefore resolves
-to **`ConnectionStrings:ConnectionStrings:SqlServer`**, which doesn't exist — so the
-production fail-fast validator in `Program.cs` killed startup, and App Service served
-its placeholder page with every route 404ing.
+.NET then has a rule of its own: it strips `SQLCONNSTR_` and maps the remainder into the
+`ConnectionStrings:` section. **Both sides add a prefix.** An entry named
+`ConnectionStrings__SqlServer` therefore arrives as
+`ConnectionStrings:ConnectionStrings:SqlServer` — which nothing reads.
 
-Either use an **App setting** named `ConnectionStrings__SqlServer` (what we did), or a
-Connection-strings entry named just **`SqlServer`**.
+The fail-fast validator then killed startup, and App Service served its placeholder page
+with every route 404ing. Use **either** an App setting named `ConnectionStrings__SqlServer`
+(what we did) **or** a Connection-strings entry named just `SqlServer` — never both
+conventions at once.
 
----
+### Why `ForwardedHeaders__Enabled=true` matters
 
-## 4. Validate production config *before* deploying
-
-Worth repeating for any new environment — it catches configuration errors without
-burning deploy cycles, and warms the database so the first deploy starts with data.
-
-```powershell
-$env:ASPNETCORE_ENVIRONMENT       = 'Production'
-$env:ConnectionStrings__SqlServer = '<prod connection string>'
-$env:Jwt__Secret                  = '<secret>'
-$env:Google__ClientId             = '<client id>'
-$env:Resend__ApiKey               = '<key>'
-$env:Fred__ApiKey                 = '<key>'
-$env:Frontend__Url                = 'https://regimedeck.com'
-dotnet run --project RegimeDeck.Api --no-launch-profile
-```
-
-Watch for, in order: no *"Missing required production configuration"*; EF applying all
-migrations; asset seeding; ingestion logging. This run applied 12 migrations, seeded 11
-assets and ingested ~74k candles and ~144k macro points into the production database
-before anything was deployed.
-
-`Failed to determine the https port for redirect` is expected over local http.
+App Service terminates TLS at its load balancer and forwards plain HTTP to your container,
+with the original client IP and scheme in `X-Forwarded-For` / `X-Forwarded-Proto`. Without
+telling ASP.NET Core to read those, two things break: the rate limiter sees the proxy's
+single IP and throttles all users as one bucket, and `UseHttpsRedirection` believes every
+request is insecure and can redirect-loop.
 
 ---
 
-## 5. Linking GitHub to Azure
+# Part IV — How deploying from GitHub actually works
 
-**App Service → Deployment Center → GitHub**, then:
+Four distinct mechanisms, usually collapsed into "it deploys automatically".
 
-- Organization / Repository / Branch — here `zdroo` / `SwingSignal` / **`master`**
-- Workflow option: **Add a workflow**
-- Authentication: **User-assigned managed identity** ← OIDC, not a publish profile
+## 1. Trust — OIDC instead of a stored secret
 
-Azure creates the managed identity, federates it with GitHub, adds three repository
-secrets (`AZUREAPPSERVICE_CLIENTID_…`, `TENANTID`, `SUBSCRIPTIONID`) and commits
-`.github/workflows/master_regime-deck-wa-linux.yml`.
+The old approach was a **publish profile**: a file with credentials, pasted into GitHub
+secrets. It works, but it's a long-lived credential sitting in two places, and rotating it
+means remembering it exists.
 
-This is why **basic authentication can stay disabled** on the web app — nothing uses a
-publish profile. It is both the easier and the more secure route.
+We used **user-assigned managed identity with federated credentials** (OIDC) instead:
 
-### ⚠ Azure's generated workflow needs two fixes
+1. Azure creates a managed identity — an Entra ID principal — and grants it rights on the web app.
+2. Azure registers a **federated credential** on it that says, in effect: *"trust tokens
+   issued by GitHub's OIDC provider whose subject is `repo:zdroo/SwingSignal:ref:refs/heads/master`."*
+3. At run time, the workflow asks GitHub for a short-lived signed token describing itself
+   (which repo, which branch). That's what `permissions: id-token: write` enables.
+4. `azure/login@v2` presents that token to Entra ID, which validates the signature and
+   checks the subject against the federated credential, then returns a short-lived Azure
+   access token.
 
-As generated it runs:
+**No secret is stored anywhere.** The three repository values Azure adds — client ID,
+tenant ID, subscription ID — are identifiers, not credentials; they're useless without a
+GitHub token proving the workflow's identity. And the trust is scoped: a workflow on a
+different branch gets a different subject and is refused.
+
+This is why **basic authentication can stay disabled** on the web app. That warning during
+creation ("may impact deployments") only applies to publish-profile deployment.
+
+## 2. Build — producing the artifact
+
+The `build` job compiles and calls `dotnet publish`, which produces a self-contained
+folder: your DLLs, dependencies, `appsettings.json`, and a `.runtimeconfig.json` naming
+the entry point and required runtime. That folder is uploaded as a workflow artifact so
+the separate `deploy` job can download it — the two jobs run on different machines.
+
+### ⚠ Why the generated workflow was wrong
+
+Azure generates:
 
 ```yaml
-- run: dotnet build --configuration Release
 - run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
 ```
 
-Neither names a project, so both resolve `RegimeDeck.slnx` — **six** projects including
-`RegimeDeck.Tests`. The .NET 10 SDK *permits* publishing a solution to a single output
-folder, so this **succeeds** and quietly deploys test assemblies (`coverlet.collector`,
-`Mvc.Testing`, `TestHost`) plus a **second `.runtimeconfig.json`**. Two runtimeconfigs
-mean App Service cannot identify the entry point, so it runs its default handler and
-serves `hostingstart.html` — a green build and a dead site.
+No project is named, so it resolves `RegimeDeck.slnx` — **six** projects, including
+`RegimeDeck.Tests`. I predicted this would fail on `NETSDK1194`; **it didn't** — .NET 10
+permits publishing a solution to a single output folder. It succeeded, which was worse
+than failing: it silently shipped `coverlet.collector`, `Mvc.Testing`, `TestHost` and a
+**second `.runtimeconfig.json`**.
 
-It also doesn't run the tests, so a red build would still ship.
+That second runtimeconfig is what actually broke the site — see the startup mechanism
+below.
 
-Corrected:
+The corrected workflow names the project and adds a test gate, since `ci.yml` runs in
+parallel and cannot hold back a deploy:
 
 ```yaml
-# Whole solution: Directory.Build.props enforces TreatWarningsAsErrors.
 - name: Build
-  run: dotnet build RegimeDeck.slnx --configuration Release
-
-# ci.yml runs in parallel and can't hold back a deploy — gate here too.
+  run: dotnet build RegimeDeck.slnx --configuration Release      # warnings-as-errors gate
 - name: Test
   run: dotnet test RegimeDeck.Tests/RegimeDeck.Tests.csproj --configuration Release --no-build
-
-# Name the project, or the test project ships with it.
 - name: Publish
   run: dotnet publish RegimeDeck.Api/RegimeDeck.Api.csproj -c Release -o publish
 ```
 
-with the artifact path changed to `publish`.
+## 3. Transport — Kudu, zip deploy, and `wwwroot`
 
-### ⚠ Zip deploy merges; it does not replace
+Every App Service has a hidden companion site at `<app>.scm.<region>.azurewebsites.net`
+called **Kudu** — the deployment engine. It exposes a REST API for pushing packages,
+browsing the filesystem, reading logs and running shell commands. `azure/webapps-deploy`
+posts your zip to it.
 
-Fixing the workflow was not enough — the earlier six-project dump stayed in `wwwroot`
-and kept breaking startup. It had to be emptied explicitly via the Kudu command API:
+Kudu unpacks it into **`/home/site/wwwroot`**, which is the application root — a
+persistent network-mounted share, not part of the container image. That's why redeploying
+doesn't rebuild a container: you're replacing files on a share the container reads.
 
-```powershell
-# POST https://<app>.scm.<region>-01.azurewebsites.net/api/command
-# body: {"command":"find /home/site/wwwroot -mindepth 1 -delete","dir":"/home/site"}
-az rest --method post --uri "https://$scm/api/command" `
-  --resource "https://management.core.windows.net/" `
-  --headers "Content-Type=application/json" --body "@clean.json"
-```
+> ### ⚠ Zip deploy merges; it does not replace
+>
+> This is the single least obvious fact in the whole process. Deploying **adds and
+> overwrites files but never deletes** ones that are no longer in your package.
+>
+> So fixing the workflow was not enough. The six-project dump from the first run stayed in
+> `wwwroot` and kept breaking startup, because the corrected package simply didn't mention
+> those files. We had to empty the directory explicitly through Kudu's command API and
+> redeploy:
+>
+> ```json
+> {"command":"find /home/site/wwwroot -mindepth 1 -delete","dir":"/home/site"}
+> ```
+>
+> `az webapp deploy --clean` returned Kudu 400, and zips built by PowerShell's
+> `Compress-Archive` are rejected outright because they use backslash entry paths. Letting
+> the Linux runner build the package was the reliable route.
 
-Then re-run the workflow (`gh workflow run master_regime-deck-wa-linux.yml`).
+## 4. Startup — how App Service decides what to run
 
-Two local alternatives that **do not** work: `az webapp deploy --clean` returns Kudu
-400, and zips built by PowerShell's `Compress-Archive` are rejected because they use
-backslash entry paths. Let the Linux runner build the package.
+For a Linux .NET app with no explicit startup command, the platform inspects `wwwroot`,
+finds the `.runtimeconfig.json`, and runs the matching DLL.
 
-### The other CI workflow
+**With two runtimeconfigs it cannot choose** — so it gives up and runs its default
+handler, which serves `hostingstart.html`. That is exactly what we saw: `Server: Kestrel`
+(the runtime *was* up), a 200 on `/`, and 404 on every real route. A running site serving a
+placeholder is the signature of "platform can't find your app", not "your app crashed" —
+a crash gives you 502/503 instead.
 
-`ci.yml` (build + 393 tests) had been triggering on `branches: [main]` while the repo
-uses **`master`** — so it had **never run once** since the repo split. The frontend's
-equivalent *was* running and had been **failing on every push for five days**, unnoticed.
+Setting an explicit **Startup Command** (`dotnet RegimeDeck.Api.dll`) removes the ambiguity
+and is worth doing defensively.
 
-Check that CI has actually executed, not merely that nobody reported a failure.
+## Why CI existing isn't the same as CI running
 
----
+`ci.yml` triggered on `branches: [main]` while the backend repo uses **`master`** — so it
+had **never executed once** since the repo split. Meanwhile the frontend's CI *was*
+running and had been **red on every push for five days**, which nobody noticed, and that
+same failure later blocked the first Vercel build.
 
-## 6. Custom domain + TLS for the API
-
-Order matters: DNS first, then binding, then certificate.
-
-**Cloudflare records** (both **DNS only / grey cloud**):
-
-| Type | Name | Value |
-|---|---|---|
-| CNAME | `api` | `<app>-<hash>.<region>-01.azurewebsites.net` |
-| TXT | `asuid.api` | the Custom Domain Verification ID |
-
-Get the verification id with:
-```powershell
-az webapp show -g regimedeck-rg -n regime-deck-wa-linux --query customDomainVerificationId -o tsv
-```
-
-Then bind and issue the free managed certificate:
-
-```powershell
-az webapp config hostname add --webapp-name regime-deck-wa-linux -g regimedeck-rg --hostname api.regimedeck.com
-az webapp config ssl create   -g regimedeck-rg --name regime-deck-wa-linux --hostname api.regimedeck.com
-az webapp config ssl bind     -g regimedeck-rg --name regime-deck-wa-linux --certificate-thumbprint <tb> --ssl-type SNI
-```
-
-`ssl create` returns a JSON deserialization traceback — a cosmetic `az` bug; the
-operation runs. Poll with `az webapp config ssl show --certificate-name api.regimedeck.com`.
-
-**The Cloudflare proxy must stay off.** An orange-clouded record makes Cloudflare
-terminate TLS itself, which blocks both issuance *and* the automatic renewal months
-later — long after anyone remembers why.
+**Confirm CI has actually run.** An empty Actions tab is not a clean bill of health, and a
+consistently red pipeline stops carrying information.
 
 ---
 
-## 7. Vercel
+# Part V — Domains, DNS and certificates
 
-1. **Import** `zdroo/swing-signal-web` — Next.js auto-detected, build settings untouched.
-2. **Environment variables**, set **before** the first build (`NEXT_PUBLIC_*` values are
-   inlined at build time; adding them later requires a rebuild):
+## What Cloudflare is doing here
 
-   ```
-   NEXT_PUBLIC_API_URL          https://api.regimedeck.com
-   NEXT_PUBLIC_SITE_URL         https://regimedeck.com
-   NEXT_PUBLIC_GOOGLE_CLIENT_ID <same id as Google__ClientId>
-   NEXT_PUBLIC_PRO_ENABLED      false
-   ```
-3. **Domains** → add `regimedeck.com` and `www.regimedeck.com`, both **Production**.
+Buying a domain gives you the right to say who answers questions about it. That's the
+**nameserver** delegation: `regimedeck.com`'s registrar points at
+`lady.ns.cloudflare.com` / `jacob.ns.cloudflare.com`, so Cloudflare is *authoritative* —
+when any resolver on earth asks where `regimedeck.com` lives, Cloudflare answers.
 
-### ⚠ The first build failed — and CI had been saying so for days
+A **zone** is the set of records for that domain. The ones we created:
 
-```
-useSearchParams() should be wrapped in a suspense boundary at page "/account"
-Error occurred prerendering page "/account"
-```
+| Record | Purpose |
+|---|---|
+| `@` CNAME → `<hash>.vercel-dns-017.com` | apex → Vercel |
+| `www` CNAME → same | so www resolves at all |
+| `api` CNAME → `<app>-<hash>.<region>-01.azurewebsites.net` | API → App Service |
+| `asuid.api` TXT → verification id | proves you own the name |
 
-`useSearchParams()` opts its component tree into client-side rendering, and a
-prerendered route needs a `<Suspense>` boundary above it. **`next dev` never
-prerenders, so the page worked perfectly in development** — only `next build` catches
-it. Fixed by moving the page body into `AccountPageContent` and wrapping it, reusing
-the spinner the page already showed while auth resolved.
+**Why the TXT record exists.** Without it, anyone could add `api.theirdomain.com` pointing
+at *your* app and serve their traffic through it, or claim a hostname you were about to
+use. The `asuid.` TXT contains a value only your Azure subscription knows, so Azure can
+confirm the person configuring DNS and the person owning the app are the same. It's proof
+of control, not routing.
 
-### ⚠ "Redirect apex domains to www (recommended)" — leave it UNCHECKED
+## Why a CNAME at the apex is unusual
 
-It is Vercel's general default, but wrong when the apex is canonical: it would make
-`www` the serving origin, breaking `Frontend__Url`, the baked-in `NEXT_PUBLIC_SITE_URL`
-and the Google origin all at once.
+DNS forbids a CNAME coexisting with other records at a zone apex, and an apex necessarily
+has SOA and NS records. Historically you used an A record with a fixed IP.
 
-**But unchecking it is not sufficient.** `www` then gets added as a plain alias that
-*serves* the site on its own hostname — arguably worse than either option, because
-sign-in from `www` sends `Origin: https://www.regimedeck.com`, which fails the API's
-CORS and Origin CSRF checks and presents as a random intermittent auth bug.
+Cloudflare works around this with **CNAME flattening**: it stores your apex CNAME but,
+when queried, resolves the target itself and answers with the resulting **A records**. The
+outside world sees a legal apex A record; you get to keep a name that follows your
+provider's IPs. That's why `nslookup regimedeck.com` returned `64.29.17.65` rather than a
+CNAME — and why Vercel can recommend a CNAME here at all. It's better than the legacy
+`76.76.21.21` A record precisely because it doesn't pin you to one IP.
 
-Explicitly set `www.regimedeck.com` → **Redirect to `regimedeck.com`, 308**. Verify:
+## Why every record must be "DNS only" (grey cloud)
 
-```bash
-curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://www.regimedeck.com/dashboard
-# 308 -> https://regimedeck.com/dashboard
-```
+Cloudflare's orange cloud means **proxied**: traffic goes to Cloudflare, which terminates
+TLS with its own certificate and opens a second connection to your origin. It's a
+deliberate, consensual man-in-the-middle for caching and WAF.
 
-### DNS for the frontend
+That breaks certificate issuance. Both Azure's managed certificate and Vercel's Let's
+Encrypt certificate prove domain control by having the CA reach the name and see the
+expected response. If Cloudflare is answering instead of your origin, validation fails —
+and, worse, it fails again at **renewal**, months later, long after anyone remembers the
+setting. Vercel's own DNS panel states `Proxy: Disabled` for this reason.
 
-| Type | Name | Value | Proxy |
-|---|---|---|---|
-| CNAME | `@` | `<hash>.vercel-dns-017.com` | **DNS only** |
-| CNAME | `www` | same | **DNS only** |
+There's also no benefit to proxying here: App Service and Vercel both already terminate
+TLS and Vercel already has a CDN, and caching does nothing for a JSON API.
 
-A CNAME at the zone apex is illegal in plain DNS; Cloudflare flattens it automatically.
-Preferred over the legacy `76.76.21.21` A record, which pins you to one IP.
+## Why DNS strictly precedes certificates
 
-Vercel shows *"Invalid Configuration"* until the records resolve, and issues each
-certificate separately — the apex came up about a minute before `www`.
+It follows from the above: a certificate authority will not issue for a name it cannot
+verify you control, and it verifies by resolving the name. So the order is always
+**DNS record → hostname binding → certificate**. Attempting it in any other order simply
+fails, which is why Vercel shows *"Invalid Configuration"* until records propagate, and
+why the two Vercel certificates (apex, then www about a minute later) appeared separately.
 
-### ⚠ Verify the API URL reached the client bundle
+## Apex vs www — one canonical origin
 
-Pages rendering correctly proves nothing: server-side rendering uses build-time fetches,
-so a missing `NEXT_PUBLIC_API_URL` yields a perfect-looking site while every *client*
-call silently falls back to `https://localhost:7260` (the default in `lib/api.ts`) and
-all auth breaks.
+We chose the **apex**, and that choice propagates into four places that must match
+character for character:
+
+- `Frontend__Url` on the API — drives CORS **and** the Origin CSRF check
+- `NEXT_PUBLIC_SITE_URL` — compiled into the frontend bundle
+- Google OAuth **Authorized JavaScript origins**
+- Vercel's primary domain
+
+`www` then has to **redirect**, not serve. Vercel's dialog offers *"redirect apex domains
+to www (recommended)"* — wrong here, since it makes www canonical. But **unchecking it
+isn't sufficient**: www gets added as a plain alias that serves the site on its own
+hostname, which is worse than either option. Sign-in from www sends
+`Origin: https://www.regimedeck.com`, the API rejects it, and it presents as an
+intermittent auth bug that depends on what the user typed. We verified this directly — a
+refresh request with the www origin returns **403**.
+
+Set www → **308 redirect** to the apex, and there is exactly one origin.
+
+---
+
+# Part VI — Vercel
+
+## What it does
+
+Vercel is a **build pipeline plus a CDN plus a serverless runtime**, connected to your
+repository. On push it clones, installs, runs `next build`, and produces an **immutable
+deployment** with its own URL. Domains are *aliases* pointed at a deployment — which is
+why rollback is instant: it re-points an alias at an earlier immutable build rather than
+rebuilding.
+
+`next build` sorts routes into two kinds, visible in the build output:
+
+- **Static (○)** — rendered at build time into HTML served from the CDN. `/`, `/dashboard`,
+  `/macro` and `/playbook` are static with a 5-minute revalidate, so they fetch your API
+  *during the build* and periodically thereafter.
+- **Dynamic (ƒ)** — rendered per request in a serverless function. `/odds/[symbol]`, since
+  the symbol isn't known ahead of time.
+
+## Why environment variables must exist before the first build
+
+`NEXT_PUBLIC_*` variables are **inlined into the JavaScript bundle at build time** — they
+are not read at runtime. Two consequences:
+
+1. **Adding one later has no effect until you rebuild.**
+2. **They are public.** Anyone can read them in the bundle. Never put a secret behind that
+   prefix; the client ID is fine, a client *secret* would not be.
+
+### ⚠ Why "the pages render" doesn't prove the API URL is set
+
+`lib/api.ts` falls back to `https://localhost:7260` when `NEXT_PUBLIC_API_URL` is missing.
+Static pages fetch at *build* time on Vercel's builder, so they'd still render perfect
+data — while every *client-side* call (auth, odds lookups) silently pointed at localhost.
+The site would look flawless and authentication would be completely broken.
+
+So verify the bundle itself, not the rendered page:
 
 ```bash
 curl -s https://regimedeck.com/auth | grep -oE '/_next/static/chunks/[^"]+\.js' | sort -u |
-  while read c; do curl -s "https://regimedeck.com$c" | grep -l "api.regimedeck.com" - ; done
+  while read c; do curl -s "https://regimedeck.com$c" | grep -q "api.regimedeck.com" && echo "found in $c"; done
 ```
 
----
+We confirmed `api.regimedeck.com` present and **zero** references to `localhost:7260`.
 
-## 8. Google OAuth
+### ⚠ The build failure that dev could never have caught
 
-A **dedicated** client — development had been borrowing another project's ID.
+```
+useSearchParams() should be wrapped in a suspense boundary at page "/account"
+```
 
-Cloud Console → **APIs & Services → Credentials → Create credentials → OAuth client ID
-→ Web application**:
+`useSearchParams()` depends on information that doesn't exist during prerendering, so it
+opts its component tree into client-side rendering — and Next requires a `<Suspense>`
+boundary marking where that switch happens, so it can prerender everything above it and
+stream the rest.
 
-- **Authorized JavaScript origins:** `https://regimedeck.com`, plus `http://localhost:3000` for dev
-- **Authorized redirect URIs:** *empty* — `@react-oauth/google` is a JS popup flow, not
-  a server redirect, so entries here do nothing
-- No `www` entry needed once `www` 308-redirects
-
-The origin must match **exactly**: `https://regimedeck.com/` (trailing slash) is a
-different origin to Google and is rejected. The same client ID must appear in the OAuth
-app, `Google__ClientId` (App Service) and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (Vercel).
-Changes can take a few minutes to propagate.
+**`next dev` never prerenders**, so the page worked perfectly in development. Only
+`next build` fails. This is the archetypal case for running the production build in CI:
+a whole class of Next.js errors exists only in that step.
 
 ---
 
-## 9. Verification
+# Part VII — Google OAuth, and the origin model that ties it together
 
-### Auth cookie flow — the load-bearing check
+## Why a dedicated OAuth client
 
-Server side, repeatable after any origin or CORS change:
+Development had been borrowing another project's client ID. That conflates two
+applications' users and consent screens, and means one project's OAuth settings can break
+the other. Production gets its own.
+
+Configuration is minimal because of the flow in use:
+
+- **Authorized JavaScript origins:** `https://regimedeck.com` (plus `http://localhost:3000`)
+- **Authorized redirect URIs:** *empty*
+
+Why empty: `@react-oauth/google` uses a **popup/JS flow**, where Google returns a credential
+to JavaScript on the page. There is no server redirect, so redirect URIs are never
+consulted. Google validates the **origin** the browser reports — hence origins matter and
+must match exactly, including scheme and absence of a trailing slash.
+
+The same client ID appears in three places: the OAuth app, `Google__ClientId` on the API
+(which validates the token server-side), and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` on Vercel.
+
+## Why the auth cookie design is what it is
+
+Worth understanding because it explains several settings that otherwise look arbitrary.
+
+The frontend is `https://regimedeck.com`; the API is `https://api.regimedeck.com`. Same
+registrable domain, **different origins** — so browser requests between them are
+cross-origin and need CORS, including `Access-Control-Allow-Credentials: true` for the
+cookie to travel.
+
+The access token lives **only in memory** (a module variable, never `localStorage`), so
+XSS cannot read it. Persistence comes from a refresh token in an **HttpOnly** cookie —
+invisible to JavaScript entirely. On reload, the in-memory token is gone and the app calls
+`/auth/refresh`, which the cookie authenticates.
+
+`SameSite=None` is set so the cookie is sent on these cross-origin requests. But `None`
+removes the CSRF protection `SameSite` normally provides — so the API adds an explicit
+**Origin check** on cookie endpoints, which is why `Frontend__Url` must match the real
+origin exactly. That's the whole chain: *cross-origin architecture → SameSite=None →
+lost CSRF defence → explicit Origin validation → one canonical origin, enforced by the www
+redirect.*
+
+Verified against the live API, and worth re-running after any origin change:
 
 ```bash
-# preflight from the real origin → 204 + Allow-Credentials + Allow-Origin
+# preflight from the real origin → 204, Allow-Credentials: true
 curl -i -X OPTIONS https://api.regimedeck.com/api/auth/refresh \
   -H "Origin: https://regimedeck.com" -H "Access-Control-Request-Method: POST"
 
-curl -X POST https://api.regimedeck.com/api/auth/refresh -H "Origin: https://regimedeck.com"      # 401 (no cookie)
-curl -X POST https://api.regimedeck.com/api/auth/refresh -H "Origin: https://evil.example.com"    # 403
-curl -X POST https://api.regimedeck.com/api/auth/refresh -H "Origin: https://www.regimedeck.com"  # 403
+curl -X POST .../api/auth/refresh -H "Origin: https://regimedeck.com"      # 401 — no cookie
+curl -X POST .../api/auth/refresh -H "Origin: https://evil.example.com"    # 403 — rejected
+curl -X POST .../api/auth/refresh -H "Origin: https://www.regimedeck.com"  # 403 — why www redirects
 ```
 
-In a real browser on the apex: sign in, **hard reload** (must stay signed in, with
-`POST /api/auth/refresh` → 200), then log out (next refresh → 401). The cookie should be
-`HttpOnly` + `Secure` + `SameSite=None` + `Path=/api/auth`.
-
-Diagnosing a reload that logs users out: **401** = cookie not sent (`SameSite`/`Secure`
-/ forwarded headers), **403** = Origin mismatch against `Frontend__Url`.
-
-### A 500 right after first boot is probably not a bug
-
-`/api/regime/current` timed out at 30s during the initial backfill — index present, DTU
-idle, pure contention. It returned in ~1s once ingestion settled. Re-test before
-investigating. Likewise `/api/screener` is empty until `ScreenerComputeService` clears
-its 10-minute startup delay.
+In the browser: sign in, **hard reload** (must stay signed in, `POST /auth/refresh` → 200),
+log out (next refresh → 401). When a reload logs users out, the status code localises the
+fault: **401** = cookie not sent (`SameSite`/`Secure`/forwarded headers), **403** = origin
+mismatch.
 
 ---
 
-## 10. Diagnosing App Service without the Portal
+# Part VIII — Validating before and after
 
-The Portal cannot show `wwwroot` contents or the container log. These were decisive:
+## Run production config locally, before deploying
+
+Point a local process at the production database with `ASPNETCORE_ENVIRONMENT=Production`:
 
 ```powershell
-az webapp config show           -g <rg> -n <app> --query "{cmd:appCommandLine,alwaysOn:alwaysOn,fx:linuxFxVersion}"
-az webapp config appsettings list -g <rg> -n <app> --query "[].name"        # names only — no secrets
-az webapp config connection-string list -g <rg> -n <app> --query "[].name"
-az webapp log deployment list   -g <rg> -n <app>                            # status 4 = success
+$env:ASPNETCORE_ENVIRONMENT       = 'Production'
+$env:ConnectionStrings__SqlServer = '<prod connection string>'
+# ...remaining required settings
+dotnet run --project RegimeDeck.Api --no-launch-profile
+```
 
-# Kudu shell — list wwwroot, grep the container log
+Two reasons this is worth doing. First, it exercises the real startup path — config
+fail-fast, EF migrations, seeding, ingestion — **without spending a deploy cycle** on each
+typo. Second, it leaves the database **warm**: this run applied 12 migrations, seeded 11
+assets and ingested ~74k candles and ~144k macro points, so the first real deploy started
+against populated data instead of an empty schema.
+
+What it can't cover: anything requiring real HTTPS — the `Secure` cookie and the
+cross-origin checks. Those wait for Phase 4.
+
+## Diagnosing App Service without the Portal
+
+The Portal cannot show you `wwwroot` or the container log. These were decisive:
+
+```powershell
+az webapp config appsettings list -g <rg> -n <app> --query "[].name"   # names only, no secrets
+az webapp config connection-string list -g <rg> -n <app>               # found the misplaced entry
+az webapp log deployment list -g <rg> -n <app>                         # status 4 = success
+
+# Kudu shell: list wwwroot, grep logs
 az rest --method post --uri "https://<scm-host>/api/command" \
         --resource "https://management.core.windows.net/" \
         --headers "Content-Type=application/json" --body '@cmd.json'
 ```
 
-The unhandled-exception stack traces live in `/home/LogFiles/StartupLogs/*_success.log`,
-not the `*_docker.log` (which carries platform messages). Enable app logging first:
+Unhandled-exception stack traces live in `/home/LogFiles/StartupLogs/*_success.log`, not
+the `*_docker.log` (which carries platform messages). Enable app logging first with
+`az webapp log config --application-logging filesystem --docker-container-logging filesystem`.
 
-```powershell
-az webapp log config -g <rg> -n <app> --application-logging filesystem --level information --docker-container-logging filesystem
-```
+## A 500 immediately after first boot is probably not a bug
 
----
-
-## 11. Rotating the SQL admin password
-
-Server first, then the app setting, so the window where they disagree is seconds:
-
-```powershell
-az sql server update -g regimedeck-rg -n regime-deck-fc --admin-password $new
-az webapp config appsettings set -g regimedeck-rg -n regime-deck-wa-linux --settings "@setting.json"
-```
-
-Pass the setting via a JSON file — a connection string contains many `=` characters and
-CLI `name=value` splitting is unreliable. Generate the password from an alphabet that
-excludes `;` `'` `"` `=` `{` `}`, which otherwise corrupt connection strings or shell
-quoting.
+`/api/regime/current` timed out at 30 s during the initial backfill. The index existed and
+DTU sat at 17% — pure contention with the ingestion writes. It returned in **~1 s** once
+ingestion settled. Similarly `/api/screener` is empty until `ScreenerComputeService` clears
+its 10-minute startup delay. **Re-test before investigating.**
 
 ---
 
-## Summary of what actually went wrong
+# Part IX — What went wrong, and the pattern
 
-Nine issues, of which **six presented as the same symptom** — a running site serving a
+Nine issues. **Six presented as the same symptom** — a running site serving Azure's
 placeholder page:
 
-1. App Service quota 0 in East US → hop region
-2. Web App created on Windows → 4× cost → recreate on Linux
-3. Connection string in the wrong blade → double-prefixed key → startup killed
-4. Workflow published the solution → test DLLs in `wwwroot` → ambiguous entry point
-5. Zip deploy merges → junk persisted → wipe `wwwroot` manually
-6. Backend CI on the wrong branch → never ran
-7. Frontend CI red for five days → unnoticed → blocked the first Vercel build
-8. `useSearchParams` without Suspense → only `next build` catches it
-9. `www` added as an alias rather than a redirect → 403 on sign-in for www visitors
+| # | Problem | Root cause |
+|---|---|---|
+| 1 | B1 create refused | Zero VM quota — regional capacity, not the account |
+| 2 | 4× the cost | Web App created on Windows; OS is fixed at plan level |
+| 3 | App wouldn't start | Connection string in the wrong blade → double-prefixed key |
+| 4 | Placeholder page | Published the solution → test DLLs + 2 runtimeconfigs |
+| 5 | Fix didn't take | Zip deploy merges; old files persisted |
+| 6 | No CI signal | Backend workflow triggered on `main`; repo uses `master` |
+| 7 | Vercel build failed | Frontend CI had been red for 5 days, unnoticed |
+| 8 | Only failed in build | `useSearchParams` without Suspense; `next dev` never prerenders |
+| 9 | 403 on sign-in | `www` added as an alias instead of a redirect |
 
-The recurring theme: **green does not mean working.** Both deploy runs went green while
-the site was dead; the Vercel build looked fine while CI had been failing for days. Verify
-the outcome — an endpoint returning real data — not the pipeline's own status.
+Three patterns worth carrying forward:
+
+**Green does not mean working.** Both Azure deploy runs went green while the site was
+dead. The certificate was issued while the app was broken. Verify an endpoint returning
+real data — never a pipeline's own status.
+
+**The same symptom rarely has the same cause.** Six of these looked identical from the
+browser. Progress came from tools that reveal *state* rather than *outcome*: listing
+`wwwroot`, listing app-setting names, reading the container log. Get to state as early as
+possible — the hours lost here were mostly spent guessing before installing `az`.
+
+**Both sides of every reference must agree, and each side may transform it.** The
+connection string failed because App Service *and* .NET each added a prefix. The origin
+checks failed because www differs from the apex by four characters. Deployment is mostly
+string-matching across system boundaries, and it's worth reading each side's
+transformation rules rather than assuming the string arrives as written.
